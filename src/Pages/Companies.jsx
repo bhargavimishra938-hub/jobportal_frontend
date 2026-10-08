@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -12,351 +12,875 @@ import {
   ExternalLink,
   Users,
   Calendar,
+  X,
+  RefreshCw,
 } from "lucide-react";
 
 import Header from "../Components/Header";
 import Footer from "../Components/Footer";
 
-// Base API URL
-const API_BASE_URL = "http://localhost/job_portal/job-portal-api";
+// =====================================================
+// API CONFIGURATION
+// =====================================================
 
-// Dynamic logo helper
+const API_BASE_URL =
+  "http://localhost/job_portal/job-portal-api";
+
+const COMPANIES_API =
+  `${API_BASE_URL}/api/companies/get-all.php`;
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+const getFirstValue = (...values) =>
+  values.find(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() !== ""
+  );
+
+// =====================================================
+// COMPANY ID
+// =====================================================
+
+const getCompanyId = (company) =>
+  getFirstValue(
+    company?.id,
+    company?.company_id,
+    company?.companyId
+  );
+
+// =====================================================
+// COMPANY NAME
+// =====================================================
+
+const getCompanyName = (company) =>
+  getFirstValue(
+    company?.company_name,
+    company?.name,
+    company?.company,
+    company?.name_of_company
+  ) || "Untitled Company";
+
+// =====================================================
+// COMPANY DESCRIPTION
+// =====================================================
+
+const getCompanyDescription = (company) => {
+  const description = getFirstValue(
+    company?.description,
+    company?.company_description,
+    company?.about,
+    company?.about_company,
+    company?.company_about,
+    company?.bio
+  );
+
+  if (!description) {
+    return "No company description provided.";
+  }
+
+  return String(description).trim();
+};
+
+// =====================================================
+// LOGO URL
+// =====================================================
+
 const getLogoUrl = (logo) => {
   if (!logo) return null;
 
-  const logoString = String(logo).trim();
+  let value = String(logo).trim();
 
-  if (logoString.startsWith("http://") || logoString.startsWith("https://")) {
-    return logoString;
+  if (!value) return null;
+
+  // Full URL
+  if (/^https?:\/\//i.test(value)) {
+    return value;
   }
 
-  return `${API_BASE_URL}/${logoString.replace(/^\/+/, "")}`;
+  // Protocol relative URL
+  if (value.startsWith("//")) {
+    return `${window.location.protocol}${value}`;
+  }
+
+  // Normalize Windows slash
+  value = value.replace(/\\/g, "/");
+
+  // Remove leading slash
+  value = value.replace(/^\/+/, "");
+
+  // Already contains backend path
+  if (value.includes("job_portal/job-portal-api/")) {
+    const index = value.indexOf(
+      "job_portal/job-portal-api/"
+    );
+
+    value = value.substring(
+      index + "job_portal/job-portal-api/".length
+    );
+  }
+
+  return `${API_BASE_URL}/${value}`;
 };
 
-// Dynamic website link helper
+// =====================================================
+// WEBSITE URL
+// =====================================================
+
 const getWebsiteUrl = (website) => {
   if (!website) return null;
 
-  const websiteString = String(website).trim();
+  let value = String(website).trim();
 
-  if (websiteString.startsWith("http://") || websiteString.startsWith("https://")) {
-    return websiteString;
+  if (!value) return null;
+
+  if (!/^https?:\/\//i.test(value)) {
+    value = `https://${value}`;
   }
 
-  return `https://${websiteString}`;
+  return value;
 };
+
+// =====================================================
+// OPEN JOBS
+// =====================================================
+
+const getOpenJobs = (company) => {
+  const value = getFirstValue(
+    company?.open_jobs,
+    company?.open_jobs_count,
+    company?.total_open_jobs,
+    company?.job_count,
+    company?.jobs_count
+  );
+
+  const number = Number(value ?? 0);
+
+  return Number.isFinite(number) ? number : 0;
+};
+
+// =====================================================
+// FALLBACK LETTER
+// =====================================================
+
+const getCompanyLogoFallback = (companyName) =>
+  String(companyName || "C")
+    .charAt(0)
+    .toUpperCase();
+
+// =====================================================
+// COMPONENT
+// =====================================================
 
 const Companies = () => {
   const [companies, setCompanies] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
-  // State for View All toggle
   const [showAll, setShowAll] = useState(false);
 
-  // PHP API Se Dynamic Data Fetch karne ka Function
+  // ===================================================
+  // FETCH COMPANIES
+  // ===================================================
+
   const fetchCompanies = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await axios.get(
-        `${API_BASE_URL}/api/companies/get-all.php`
+      const response = await axios.get(COMPANIES_API, {
+        timeout: 15000,
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      console.log(
+        "Companies API Response:",
+        response.data
       );
 
-      console.log("Companies API Response:", response.data);
+      const result = response.data;
 
-      if (response.data && response.data.success) {
-        // Safe check dynamic array binding
-        const rawData = response.data.companies || response.data.data || [];
-        const companyData = Array.isArray(rawData) ? rawData : [];
-
-        setCompanies(companyData);
-      } else {
-        setCompanies([]);
-        setError(
-          response.data?.message || "No dynamic company data received."
+      if (result?.success === false) {
+        throw new Error(
+          result?.message ||
+            "Unable to fetch companies."
         );
       }
+
+      let rawData = [];
+
+      // -----------------------------------------------
+      // RESPONSE FORMAT 1
+      // -----------------------------------------------
+
+      if (Array.isArray(result)) {
+        rawData = result;
+      }
+
+      // -----------------------------------------------
+      // RESPONSE FORMAT 2
+      // -----------------------------------------------
+
+      else if (Array.isArray(result?.companies)) {
+        rawData = result.companies;
+      }
+
+      // -----------------------------------------------
+      // RESPONSE FORMAT 3
+      // -----------------------------------------------
+
+      else if (Array.isArray(result?.data)) {
+        rawData = result.data;
+      }
+
+      // -----------------------------------------------
+      // RESPONSE FORMAT 4
+      // -----------------------------------------------
+
+      else if (
+        Array.isArray(result?.data?.companies)
+      ) {
+        rawData = result.data.companies;
+      }
+
+      // -----------------------------------------------
+      // RESPONSE FORMAT 5
+      // -----------------------------------------------
+
+      else if (
+        Array.isArray(result?.data?.data)
+      ) {
+        rawData = result.data.data;
+      }
+
+      // -----------------------------------------------
+      // VALID COMPANIES
+      // -----------------------------------------------
+
+      const validCompanies = rawData.filter(
+        (company) =>
+          company &&
+          typeof company === "object" &&
+          getCompanyName(company) !==
+            "Untitled Company"
+      );
+
+      setCompanies(validCompanies);
     } catch (err) {
-      console.error("Companies API Error:", err);
+      console.error(
+        "Companies API Error:",
+        err.response?.data || err.message
+      );
+
+      setCompanies([]);
+
       setError(
         err.response?.data?.message ||
-          "Unable to connect to the backend server. Please verify your API URL."
+          err.message ||
+          "Unable to connect to the backend server."
       );
-      setCompanies([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ===================================================
+  // INITIAL LOAD
+  // ===================================================
+
   useEffect(() => {
     fetchCompanies();
   }, []);
 
-  // Live Dynamic Filtering (Search Bar)
-  const filteredCompanies = companies.filter((company) => {
+  // ===================================================
+  // SEARCH
+  // ===================================================
+
+  const filteredCompanies = useMemo(() => {
     const searchText = search.trim().toLowerCase();
 
-    if (!searchText) return true;
+    if (!searchText) {
+      return companies;
+    }
 
-    const companyName = String(company.company_name || "").toLowerCase();
-    const location = String(company.location || "").toLowerCase();
-    const industry = String(company.industry || "").toLowerCase();
+    return companies.filter((company) => {
+      const searchableValues = [
+        getCompanyName(company),
+        getCompanyDescription(company),
+        company?.location,
+        company?.industry,
+        company?.company_size,
+        company?.website,
+      ];
 
-    return (
-      companyName.includes(searchText) ||
-      location.includes(searchText) ||
-      industry.includes(searchText)
-    );
-  });
+      return searchableValues.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(searchText)
+      );
+    });
+  }, [companies, search]);
 
-  // Dynamic slice logic: Search context active hone par ya showAll true hone par sabhi dikhegi, warna initial 4
-  const visibleCompanies = (search.trim() || showAll)
-    ? filteredCompanies
-    : filteredCompanies.slice(0, 4);
+  // ===================================================
+  // VISIBLE COMPANIES
+  // ===================================================
+
+  const visibleCompanies = useMemo(() => {
+    if (search.trim() || showAll) {
+      return filteredCompanies;
+    }
+
+    return filteredCompanies.slice(0, 4);
+  }, [
+    filteredCompanies,
+    search,
+    showAll,
+  ]);
+
+  // ===================================================
+  // CLEAR SEARCH
+  // ===================================================
+
+  const clearSearch = () => {
+    setSearch("");
+    setShowAll(false);
+  };
+
+  // ===================================================
+  // RENDER
+  // ===================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-between">
-      <div>
-        <Header />
+    <div className="flex min-h-screen flex-col bg-slate-50">
 
-        {/* Hero & Search Header */}
-        <section className="border-b bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Header />
+
+      <main className="flex-1">
+
+        {/* =================================================
+            HERO
+        ================================================= */}
+
+        <section className="border-b border-slate-200 bg-white">
+
+          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+
             <div className="mx-auto max-w-3xl text-center">
-              <h1 className="text-4xl font-bold text-gray-900 md:text-5xl">
+
+              {/* ICON */}
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm">
+                <Building2 size={28} />
+              </div>
+
+              {/* LABEL */}
+
+              <p className="mt-5 text-sm font-bold uppercase tracking-wider text-blue-600">
+                Company Directory
+              </p>
+
+              {/* TITLE */}
+
+              <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
                 Explore Companies
               </h1>
 
-              <p className="mt-4 text-lg text-gray-600">
-                Discover top organizations hiring right now, explore their culture, and direct positions.
+              {/* DESCRIPTION */}
+
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+                Discover companies, explore their profiles,
+                and find open positions that match your
+                skills and career goals.
               </p>
 
-              {/* Dynamic Search Box */}
+              {/* SEARCH */}
+
               <div className="relative mx-auto mt-8 max-w-2xl">
+
                 <Search
                   size={20}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                 />
 
                 <input
                   type="text"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search by company name, location, or industry..."
-                  className="w-full rounded-xl border border-gray-300 bg-white py-4 pl-12 pr-4 text-gray-800 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setShowAll(false);
+                  }}
+                  placeholder="Search by company, location, industry..."
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-12 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                 />
+
+                {search && (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700"
+                    aria-label="Clear search"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+
               </div>
+
+              {/* SEARCH COUNT */}
+
+              {!loading &&
+                !error &&
+                search && (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Found{" "}
+                    <span className="font-bold text-slate-800">
+                      {filteredCompanies.length}
+                    </span>{" "}
+                    {filteredCompanies.length === 1
+                      ? "company"
+                      : "companies"}
+                  </p>
+                )}
+
             </div>
+
           </div>
+
         </section>
 
-        {/* Main Content Section */}
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          {/* Loading Indicator */}
+        {/* =================================================
+            CONTENT
+        ================================================= */}
+
+        <section className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+
+          {/* =================================================
+              LOADING
+          ================================================= */}
+
           {loading && (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 size={40} className="animate-spin text-blue-600" />
-              <p className="mt-4 text-sm font-medium text-gray-600">
-                Fetching dynamic company listings...
+            <div className="flex min-h-[350px] flex-col items-center justify-center">
+
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
+
+                <Loader2
+                  size={30}
+                  className="animate-spin text-blue-600"
+                />
+
+              </div>
+
+              <p className="mt-5 text-sm font-semibold text-slate-600">
+                Loading companies...
               </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Fetching latest company information
+              </p>
+
             </div>
           )}
 
-          {/* Error Message */}
+          {/* =================================================
+              ERROR
+          ================================================= */}
+
           {!loading && error && (
-            <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 text-center shadow-sm">
-              <AlertCircle size={40} className="mx-auto text-red-500" />
-              <h3 className="mt-3 text-lg font-semibold text-red-700">
-                Data Load Error
+            <div className="mx-auto max-w-xl rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm">
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                <AlertCircle size={28} />
+              </div>
+
+              <h3 className="mt-5 text-xl font-bold text-slate-900">
+                Unable to Load Companies
               </h3>
-              <p className="mt-2 text-sm text-red-600">{error}</p>
+
+              <p className="mt-2 break-words text-sm leading-6 text-slate-500">
+                {error}
+              </p>
 
               <button
                 type="button"
                 onClick={fetchCompanies}
-                className="mt-5 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 active:scale-95"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
               >
-                Try Reloading
+                <RefreshCw size={16} />
+                Try Again
               </button>
+
             </div>
           )}
 
-          {/* Empty Records State */}
-          {!loading && !error && filteredCompanies.length === 0 && (
-            <div className="py-20 text-center">
-              <Building2 size={56} className="mx-auto text-gray-300" />
-              <h3 className="mt-4 text-xl font-semibold text-gray-800">
-                No Companies Found
-              </h3>
-              <p className="mt-2 text-gray-500">
-                {search
-                  ? "No dynamic results matched your search terms."
-                  : "No registered companies are available in the system yet."}
-              </p>
-            </div>
-          )}
+          {/* =================================================
+              EMPTY
+          ================================================= */}
 
-          {/* Dynamic Grid Listing */}
-          {!loading && !error && filteredCompanies.length > 0 && (
-            <>
-              <div className="mb-6 flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Companies Directory
-                  </h2>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Showing <span className="font-semibold text-gray-800">{visibleCompanies.length}</span> of{" "}
-                    <span className="font-semibold text-gray-800">{filteredCompanies.length}</span> dynamic employer record(s)
-                  </p>
+          {!loading &&
+            !error &&
+            filteredCompanies.length === 0 && (
+              <div className="py-20 text-center">
+
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                  <Building2 size={30} />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {visibleCompanies.map((company) => {
-                  const logoUrl = getLogoUrl(company.logo);
-                  const websiteUrl = getWebsiteUrl(company.website);
-                  const openJobs = Number(company.open_jobs || 0);
+                <h3 className="mt-5 text-xl font-bold text-slate-900">
+                  No Companies Found
+                </h3>
 
-                  // Unique key identification
-                  const companyKey = company.id || company.company_id || company.user_id;
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                  {search
+                    ? "No companies match your search. Try another company name, location or industry."
+                    : "No registered companies are available in the system yet."}
+                </p>
 
-                  return (
-                    <div
-                      key={companyKey}
-                      className="flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"
-                    >
-                      <div>
-                        {/* Company Logo and Name */}
-                        <div className="flex items-start gap-4">
-                          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-1">
-                            {logoUrl ? (
-                              <img
-                                src={logoUrl}
-                                alt={company.company_name || "Company Logo"}
-                                className="h-full w-full object-contain"
-                                onError={(e) => {
-                                  // Image fail-safe fallback
-                                  e.target.onerror = null;
-                                  e.target.style.display = "none";
-                                  e.target.parentElement.innerHTML = `<div class="text-blue-600 font-bold text-xl">${(
-                                    company.company_name || "C"
-                                  )
-                                    .charAt(0)
-                                    .toUpperCase()}</div>`;
-                                }}
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-blue-50 font-bold text-xl text-blue-600">
-                                {(company.company_name || "C")
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <h3 className="truncate text-lg font-bold text-gray-900">
-                              {company.company_name || "Untitled Company"}
-                            </h3>
-
-                            {company.industry && (
-                              <span className="inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700">
-                                {company.industry}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        <p className="mt-4 line-clamp-3 text-sm text-gray-600 leading-relaxed">
-                          {company.description || "No company description provided."}
-                        </p>
-
-                        {/* Meta Specs */}
-                        <div className="mt-5 space-y-2.5 border-t border-gray-100 pt-4 text-xs text-gray-600">
-                          {company.location && (
-                            <div className="flex items-center gap-2">
-                              <MapPin size={15} className="shrink-0 text-gray-400" />
-                              <span className="truncate">{company.location}</span>
-                            </div>
-                          )}
-
-                          {company.company_size && (
-                            <div className="flex items-center gap-2">
-                              <Users size={15} className="shrink-0 text-gray-400" />
-                              <span>{company.company_size} Employees</span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2 font-medium text-emerald-600">
-                            <Briefcase size={15} className="shrink-0 text-emerald-500" />
-                            <span>
-                              {openJobs} {openJobs === 1 ? "Open Position" : "Open Positions"}
-                            </span>
-                          </div>
-
-                          {company.founded_year && (
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <Calendar size={15} className="shrink-0" />
-                              <span>Founded in {company.founded_year}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action Links */}
-                      <div className="mt-6 flex items-center gap-3 pt-2">
-                        <Link
-                          to={
-                            company.is_profile_fallback
-                              ? `/jobs?search=${encodeURIComponent(company.company_name || "")}`
-                              : `/companies/${company.id || company.company_id}`
-                          }
-                          className="flex-1 rounded-xl bg-blue-600 py-2.5 text-center text-xs font-semibold text-white transition hover:bg-blue-700 active:scale-95"
-                        >
-                          {company.is_profile_fallback ? "View Openings" : "View Details"}
-                        </Link>
-
-                        {websiteUrl && (
-                          <a
-                            href={websiteUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center rounded-xl border border-gray-300 p-2.5 text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-                            title="Visit Official Website"
-                          >
-                            <ExternalLink size={16} />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* View All / Show Less Button */}
-              {!search.trim() && filteredCompanies.length > 4 && (
-                <div className="mt-10 flex justify-center">
+                {search && (
                   <button
                     type="button"
-                    onClick={() => setShowAll(!showAll)}
-                    className="rounded-xl bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 active:scale-95"
+                    onClick={clearSearch}
+                    className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700"
                   >
-                    {showAll
-                      ? "Show Less"
-                      : `View All Companies (${filteredCompanies.length - 4} More)`}
+                    Clear Search
                   </button>
+                )}
+
+              </div>
+            )}
+
+          {/* =================================================
+              COMPANIES
+          ================================================= */}
+
+          {!loading &&
+            !error &&
+            filteredCompanies.length > 0 && (
+              <>
+
+                {/* DIRECTORY HEADER */}
+
+                <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+
+                  <div>
+
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Discover employers
+                    </p>
+
+                    <h2 className="mt-1 text-2xl font-black text-slate-900">
+                      Companies Directory
+                    </h2>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Showing{" "}
+                      <span className="font-bold text-slate-800">
+                        {visibleCompanies.length}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-bold text-slate-800">
+                        {filteredCompanies.length}
+                      </span>{" "}
+                      companies
+                    </p>
+
+                  </div>
+
                 </div>
-              )}
-            </>
-          )}
+
+                {/* =================================================
+                    COMPANY GRID
+                ================================================= */}
+
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+
+                  {visibleCompanies.map(
+                    (company, index) => {
+
+                      const companyId =
+                        getCompanyId(company);
+
+                      const companyName =
+                        getCompanyName(company);
+
+                      const description =
+                        getCompanyDescription(company);
+
+                      const logoUrl =
+                        getLogoUrl(company?.logo);
+
+                      const websiteUrl =
+                        getWebsiteUrl(
+                          company?.website
+                        );
+
+                      const openJobs =
+                        getOpenJobs(company);
+
+                      const companyKey =
+                        companyId ??
+                        company?.recruiter_id ??
+                        `${companyName}-${index}`;
+
+                      const detailsPath =
+                        companyId
+                          ? `/companies/${encodeURIComponent(
+                              String(companyId)
+                            )}`
+                          : `/jobs?company=${encodeURIComponent(
+                              companyName
+                            )}`;
+
+                      return (
+                        <article
+                          key={companyKey}
+                          className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl"
+                        >
+
+                          {/* TOP ACCENT */}
+
+                          <div className="h-1.5 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400" />
+
+                          <div className="flex flex-1 flex-col p-6">
+
+                            {/* =================================================
+                                COMPANY HEADER
+                            ================================================= */}
+
+                            <div className="flex items-start gap-4">
+
+                              {/* LOGO */}
+
+                              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+
+                                {logoUrl ? (
+                                  <img
+                                    src={logoUrl}
+                                    alt={`${companyName} Logo`}
+                                    className="h-full w-full object-contain p-2"
+                                    onError={(event) => {
+                                      event.currentTarget.style.display =
+                                        "none";
+
+                                      const fallback =
+                                        event.currentTarget
+                                          .nextElementSibling;
+
+                                      if (fallback) {
+                                        fallback.style.display =
+                                          "flex";
+                                      }
+                                    }}
+                                  />
+                                ) : null}
+
+                                <div
+                                  className="h-full w-full items-center justify-center bg-blue-50 text-2xl font-black text-blue-600"
+                                  style={{
+                                    display: logoUrl
+                                      ? "none"
+                                      : "flex",
+                                  }}
+                                >
+                                  {getCompanyLogoFallback(
+                                    companyName
+                                  )}
+                                </div>
+
+                              </div>
+
+                              {/* COMPANY NAME */}
+
+                              <div className="min-w-0 flex-1">
+
+                                <h3
+                                  title={companyName}
+                                  className="line-clamp-2 text-lg font-black leading-6 text-slate-900"
+                                >
+                                  {companyName}
+                                </h3>
+
+                                {company?.industry && (
+                                  <span className="mt-2 inline-flex max-w-full truncate rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                                    {company.industry}
+                                  </span>
+                                )}
+
+                              </div>
+
+                            </div>
+
+                            {/* =================================================
+                                DESCRIPTION
+                            ================================================= */}
+
+                            <div className="mt-4">
+
+                              <p
+                                title={description}
+                                className="line-clamp-2 text-sm leading-6 text-slate-600"
+                              >
+                                {description}
+                              </p>
+
+                            </div>
+
+                            {/* =================================================
+                                META
+                            ================================================= */}
+
+                            <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-4">
+
+                              {/* LOCATION */}
+
+                              {company?.location && (
+                                <div className="flex items-center gap-2.5 text-sm text-slate-600">
+
+                                  <MapPin
+                                    size={16}
+                                    className="shrink-0 text-slate-400"
+                                  />
+
+                                  <span className="truncate">
+                                    {company.location}
+                                  </span>
+
+                                </div>
+                              )}
+
+                              {/* EMPLOYEES */}
+
+                              {company?.company_size && (
+                                <div className="flex items-center gap-2.5 text-sm text-slate-600">
+
+                                  <Users
+                                    size={16}
+                                    className="shrink-0 text-slate-400"
+                                  />
+
+                                  <span>
+                                    {company.company_size}{" "}
+                                    Employees
+                                  </span>
+
+                                </div>
+                              )}
+
+                              {/* OPEN JOBS */}
+
+                              <div className="flex items-center gap-2.5 text-sm font-bold text-emerald-600">
+
+                                <Briefcase
+                                  size={16}
+                                  className="shrink-0"
+                                />
+
+                                <span>
+                                  {openJobs}{" "}
+                                  {openJobs === 1
+                                    ? "Open Position"
+                                    : "Open Positions"}
+                                </span>
+
+                              </div>
+
+                              {/* FOUNDED */}
+
+                              {company?.founded_year && (
+                                <div className="flex items-center gap-2.5 text-sm text-slate-500">
+
+                                  <Calendar
+                                    size={16}
+                                    className="shrink-0 text-slate-400"
+                                  />
+
+                                  <span>
+                                    Founded in{" "}
+                                    {company.founded_year}
+                                  </span>
+
+                                </div>
+                              )}
+
+                            </div>
+
+                            {/* =================================================
+                                ACTIONS
+                            ================================================= */}
+
+                            <div className="mt-auto flex items-center gap-3 pt-5">
+
+                              <Link
+                                to={detailsPath}
+                                className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-blue-700"
+                              >
+                                View Details
+                              </Link>
+
+                              {websiteUrl && (
+                                <a
+                                  href={websiteUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Visit Official Website"
+                                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                                >
+                                  <ExternalLink size={17} />
+                                </a>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </article>
+                      );
+                    }
+                  )}
+
+                </div>
+
+                {/* =================================================
+                    VIEW ALL
+                ================================================= */}
+
+                {!search.trim() &&
+                  filteredCompanies.length > 4 && (
+                    <div className="mt-10 flex justify-center">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowAll(
+                            (previous) => !previous
+                          )
+                        }
+                        className="rounded-xl bg-slate-900 px-7 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-600"
+                      >
+                        {showAll
+                          ? "Show Less"
+                          : `View All Companies (${
+                              filteredCompanies.length -
+                              4
+                            } More)`}
+                      </button>
+
+                    </div>
+                  )}
+
+              </>
+            )}
+
         </section>
-      </div>
+
+      </main>
 
       <Footer />
+
     </div>
   );
 };

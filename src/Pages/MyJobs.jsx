@@ -92,9 +92,7 @@ const MyJobs = () => {
       return "Recently";
     }
 
-    const days = Math.floor(
-      difference / (1000 * 60 * 60 * 24)
-    );
+    const days = Math.floor(difference / (1000 * 60 * 60 * 24));
 
     if (days <= 0) {
       return "today";
@@ -155,9 +153,7 @@ const MyJobs = () => {
 
   const formatSkills = (skills) => {
     if (Array.isArray(skills)) {
-      return skills
-        .map((skill) => String(skill).trim())
-        .filter(Boolean);
+      return skills.map((skill) => String(skill).trim()).filter(Boolean);
     }
 
     if (typeof skills === "string") {
@@ -200,7 +196,11 @@ const MyJobs = () => {
         return;
       }
 
-      if (String(user.role || "").toLowerCase().trim() !== "recruiter") {
+      if (
+        String(user.role || "")
+          .toLowerCase()
+          .trim() !== "recruiter"
+      ) {
         setError("Only recruiters can view their jobs.");
         setJobs([]);
         return;
@@ -211,13 +211,11 @@ const MyJobs = () => {
       // =====================================================
 
       const jobsResponse = await fetch(
-        `${GET_MY_JOBS_API}?recruiterId=${recruiterId}`
+        `${GET_MY_JOBS_API}?recruiterId=${recruiterId}`,
       );
 
       if (!jobsResponse.ok) {
-        throw new Error(
-          `Jobs server error: ${jobsResponse.status}`
-        );
+        throw new Error(`Jobs server error: ${jobsResponse.status}`);
       }
 
       const jobsData = await jobsResponse.json();
@@ -225,9 +223,7 @@ const MyJobs = () => {
       console.log("My Jobs API Response:", jobsData);
 
       if (!jobsData.success) {
-        throw new Error(
-          jobsData.message || "Failed to fetch jobs"
-        );
+        throw new Error(jobsData.message || "Failed to fetch jobs");
       }
 
       // =====================================================
@@ -238,33 +234,22 @@ const MyJobs = () => {
 
       try {
         const applicationsResponse = await fetch(
-          `${GET_RECRUITER_APPLICATIONS_API}?recruiterId=${recruiterId}`
+          `${GET_RECRUITER_APPLICATIONS_API}?recruiterId=${recruiterId}`,
         );
 
         if (applicationsResponse.ok) {
-          const applicationsData =
-            await applicationsResponse.json();
+          const applicationsData = await applicationsResponse.json();
 
-          console.log(
-            "Recruiter Applications API Response:",
-            applicationsData
-          );
+          console.log("Recruiter Applications API Response:", applicationsData);
 
           if (applicationsData.success) {
-            applications =
-              applicationsData.applications || [];
+            applications = applicationsData.applications || [];
           }
         } else {
-          console.warn(
-            "Applications API failed:",
-            applicationsResponse.status
-          );
+          console.warn("Applications API failed:", applicationsResponse.status);
         }
       } catch (applicationError) {
-        console.warn(
-          "Applications API Error:",
-          applicationError
-        );
+        console.warn("Applications API Error:", applicationError);
       }
 
       // =====================================================
@@ -275,119 +260,75 @@ const MyJobs = () => {
 
       applications.forEach((application) => {
         const jobId = Number(
-          application.job_id ??
-            application.jobId ??
-            application.job?.id
+          application.job_id ?? application.jobId ?? application.job?.id,
         );
 
         if (!jobId) {
           return;
         }
 
-        applicantCountByJob[jobId] =
-          (applicantCountByJob[jobId] || 0) + 1;
+        applicantCountByJob[jobId] = (applicantCountByJob[jobId] || 0) + 1;
       });
 
-      console.log(
-        "Applicant Count By Job:",
-        applicantCountByJob
-      );
+      console.log("Applicant Count By Job:", applicantCountByJob);
 
       // =====================================================
       // FORMAT JOBS
       // =====================================================
 
-      const formattedJobs = (jobsData.jobs || []).map(
-        (job) => {
-          const jobId = Number(job.id);
+      const formattedJobs = (jobsData.jobs || []).map((job) => {
+        const jobId = Number(job.id);
 
-          let formattedStatus = "Active";
+        let formattedStatus = "Active";
 
-          if (
-            String(job.status).toLowerCase() ===
-            "closed"
-          ) {
-            formattedStatus = "Closed";
-          } else {
-            formattedStatus = "Active";
-          }
-
-          return {
-            id: jobId,
-
-            title:
-              job.job_title ||
-              job.title ||
-              "Untitled Job",
-
-            category:
-              job.category ||
-              "IT & Software",
-
-            companyName:
-              job.company_name ||
-              job.companyName ||
-              "",
-
-            location:
-              job.location ||
-              "Not specified",
-
-            type:
-              job.job_type ||
-              job.type ||
-              "Full Time",
-
-            workplace:
-              job.workplace ||
-              job.workplace_type ||
-              "Not specified",
-
-            experience:
-              job.experience ||
-              "Fresher",
-
-            salary:
-              job.salary ||
-              "Salary not specified",
-
-            // REAL APPLICANT COUNT
-            applicants:
-              applicantCountByJob[jobId] || 0,
-
-            // Backend view tracking not available yet
-            views:
-              Number(job.views || 0),
-
-            posted:
-              formatPostedDate(job.created_at),
-
-            deadline:
-              formatDeadline(job.deadline),
-
-            status:
-              formattedStatus,
-
-            skills:
-              formatSkills(job.skills),
-
-            description:
-              job.description || "",
-          };
+        if (String(job.status).toLowerCase() === "closed") {
+          formattedStatus = "Closed";
+        } else {
+          formattedStatus = "Active";
         }
-      );
+
+        return {
+          id: jobId,
+
+          title: job.job_title || job.title || "Untitled Job",
+
+          category: job.category || "IT & Software",
+
+          companyName: job.company_name || job.companyName || "",
+
+          location: job.location || "Not specified",
+
+          type: job.job_type || job.type || "Full Time",
+
+          workplace: job.workplace || job.workplace_type || "Not specified",
+
+          experience: job.experience || "Fresher",
+
+          salary: job.salary || "Salary not specified",
+
+          // REAL APPLICANT COUNT
+          applicants: applicantCountByJob[jobId] || 0,
+
+          // Backend view tracking not available yet
+          views: Number(job.views || 0),
+
+          posted: formatPostedDate(job.created_at),
+
+          deadline: formatDeadline(job.deadline),
+
+          status: formattedStatus,
+
+          skills: formatSkills(job.skills),
+
+          description: job.description || "",
+        };
+      });
 
       setJobs(formattedJobs);
     } catch (error) {
-      console.error(
-        "Fetch My Jobs Error:",
-        error
-      );
+      console.error("Fetch My Jobs Error:", error);
 
-      setError(
-        error.message ||
-          "Something went wrong while fetching jobs."
-      );
+      setError(error.message || "Something went wrong while fetching jobs.");
 
       setJobs([]);
     } finally {
@@ -418,7 +359,7 @@ const MyJobs = () => {
 
   const deleteJob = async (job) => {
     const confirmDelete = window.confirm(
-      `Are you sure you want to delete "${job.title}"?`
+      `Are you sure you want to delete "${job.title}"?`,
     );
 
     if (!confirmDelete) {
@@ -434,60 +375,45 @@ const MyJobs = () => {
         return;
       }
 
-      if (String(user.role || "").toLowerCase().trim() !== "recruiter") {
+      if (
+        String(user.role || "")
+          .toLowerCase()
+          .trim() !== "recruiter"
+      ) {
         alert("Only recruiter can delete jobs.");
         return;
       }
 
       setOpenMenu(null);
 
-      const response = await fetch(
-        DELETE_JOB_API,
-        {
-          method: "POST",
+      const response = await fetch(DELETE_JOB_API, {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            job_id: Number(job.id),
-            recruiter_id: Number(user.id),
-          }),
-        }
-      );
+        body: JSON.stringify({
+          job_id: Number(job.id),
+          recruiter_id: Number(user.id),
+        }),
+      });
 
       const data = await response.json();
 
-      console.log(
-        "Delete Job Response:",
-        data
-      );
+      console.log("Delete Job Response:", data);
 
       if (!response.ok || !data.success) {
-        throw new Error(
-          data.message ||
-            "Failed to delete job"
-        );
+        throw new Error(data.message || "Failed to delete job");
       }
 
-      setJobs((prevJobs) =>
-        prevJobs.filter(
-          (item) => item.id !== job.id
-        )
-      );
+      setJobs((prevJobs) => prevJobs.filter((item) => item.id !== job.id));
 
       alert("Job deleted successfully.");
     } catch (error) {
-      console.error(
-        "Delete Job Error:",
-        error
-      );
+      console.error("Delete Job Error:", error);
 
-      alert(
-        error.message ||
-          "Something went wrong while deleting the job."
-      );
+      alert(error.message || "Something went wrong while deleting the job.");
     }
   };
 
@@ -518,9 +444,7 @@ const MyJobs = () => {
       return;
     }
 
-    navigate(
-      `/recruiter/edit-job/${job.id}`
-    );
+    navigate(`/recruiter/edit-job/${job.id}`);
   };
 
   // =========================================================
@@ -553,59 +477,48 @@ const MyJobs = () => {
         return;
       }
 
-      if (String(user.role || "").toLowerCase().trim() !== "recruiter") {
-        alert(
-          "Only recruiter can change job status."
-        );
+      if (
+        String(user.role || "")
+          .toLowerCase()
+          .trim() !== "recruiter"
+      ) {
+        alert("Only recruiter can change job status.");
         return;
       }
 
-      const newStatus =
-        job.status === "Active"
-          ? "closed"
-          : "active";
+      const newStatus = job.status === "Active" ? "closed" : "active";
 
       const confirmMessage =
         newStatus === "closed"
           ? `Are you sure you want to close "${job.title}"?`
           : `Do you want to activate "${job.title}" again?`;
 
-      const confirmed =
-        window.confirm(confirmMessage);
+      const confirmed = window.confirm(confirmMessage);
 
       if (!confirmed) {
         return;
       }
 
-      const response = await fetch(
-        UPDATE_STATUS_API,
-        {
-          method: "POST",
+      const response = await fetch(UPDATE_STATUS_API, {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            job_id: Number(job.id),
-            recruiter_id: Number(user.id),
-            status: newStatus,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          job_id: Number(job.id),
+          recruiter_id: Number(user.id),
+          status: newStatus,
+        }),
+      });
 
       const data = await response.json();
 
-      console.log(
-        "Update Status Response:",
-        data
-      );
+      console.log("Update Status Response:", data);
 
       if (!response.ok || !data.success) {
-        throw new Error(
-          data.message ||
-            "Failed to update job status"
-        );
+        throw new Error(data.message || "Failed to update job status");
       }
 
       setJobs((prevJobs) =>
@@ -613,30 +526,21 @@ const MyJobs = () => {
           item.id === job.id
             ? {
                 ...item,
-                status:
-                  newStatus === "active"
-                    ? "Active"
-                    : "Closed",
+                status: newStatus === "active" ? "Active" : "Closed",
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       alert(
         newStatus === "active"
           ? "Job activated successfully."
-          : "Job closed successfully."
+          : "Job closed successfully.",
       );
     } catch (error) {
-      console.error(
-        "Update Status Error:",
-        error
-      );
+      console.error("Update Status Error:", error);
 
-      alert(
-        error.message ||
-          "Something went wrong while updating the job."
-      );
+      alert(error.message || "Something went wrong while updating the job.");
     }
   };
 
@@ -648,25 +552,16 @@ const MyJobs = () => {
     return {
       total: jobs.length,
 
-      active: jobs.filter(
-        (job) => job.status === "Active"
-      ).length,
+      active: jobs.filter((job) => job.status === "Active").length,
 
-      closed: jobs.filter(
-        (job) => job.status === "Closed"
-      ).length,
+      closed: jobs.filter((job) => job.status === "Closed").length,
 
       applicants: jobs.reduce(
-        (sum, job) =>
-          sum + Number(job.applicants || 0),
-        0
+        (sum, job) => sum + Number(job.applicants || 0),
+        0,
       ),
 
-      views: jobs.reduce(
-        (sum, job) =>
-          sum + Number(job.views || 0),
-        0
-      ),
+      views: jobs.reduce((sum, job) => sum + Number(job.views || 0), 0),
     };
   }, [jobs]);
 
@@ -675,44 +570,23 @@ const MyJobs = () => {
   // =========================================================
 
   const filteredJobs = useMemo(() => {
-    const searchText =
-      search.toLowerCase().trim();
+    const searchText = search.toLowerCase().trim();
 
     return jobs.filter((job) => {
       const matchesSearch =
-        job.title
-          .toLowerCase()
-          .includes(searchText) ||
-        job.location
-          .toLowerCase()
-          .includes(searchText) ||
-        job.category
-          .toLowerCase()
-          .includes(searchText) ||
-        job.companyName
-          .toLowerCase()
-          .includes(searchText) ||
-        job.type
-          .toLowerCase()
-          .includes(searchText) ||
-        job.experience
-          .toLowerCase()
-          .includes(searchText);
+        job.title.toLowerCase().includes(searchText) ||
+        job.location.toLowerCase().includes(searchText) ||
+        job.category.toLowerCase().includes(searchText) ||
+        job.companyName.toLowerCase().includes(searchText) ||
+        job.type.toLowerCase().includes(searchText) ||
+        job.experience.toLowerCase().includes(searchText);
 
       const matchesStatus =
-        statusFilter === "All" ||
-        job.status === statusFilter;
+        statusFilter === "All" || job.status === statusFilter;
 
-      return (
-        matchesSearch &&
-        matchesStatus
-      );
+      return matchesSearch && matchesStatus;
     });
-  }, [
-    jobs,
-    search,
-    statusFilter,
-  ]);
+  }, [jobs, search, statusFilter]);
 
   // =========================================================
   // STATUS CONFIG
@@ -720,14 +594,12 @@ const MyJobs = () => {
 
   const statusConfig = {
     Active: {
-      className:
-        "bg-emerald-50 text-emerald-600",
+      className: "bg-emerald-50 text-emerald-600",
       dot: "bg-emerald-500",
     },
 
     Closed: {
-      className:
-        "bg-gray-100 text-gray-500",
+      className: "bg-gray-100 text-gray-500",
       dot: "bg-gray-400",
     },
   };
@@ -739,73 +611,164 @@ const MyJobs = () => {
   return (
     <div
       className="min-h-screen bg-gray-50 text-gray-900"
-      onClick={() =>
-        setOpenMenu(null)
-      }
+      onClick={() => setOpenMenu(null)}
     >
       {/* =====================================================
-          HEADER
-      ====================================================== */}
+    MODERN PAGE HEADER
+===================================================== */}
 
-      <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
-        <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-5 lg:px-7">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">
+    {/* =====================================================
+    ROUNDED MODERN PAGE HEADER
+===================================================== */}
+
+<header className="relative mx-4 mt-4 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm lg:mx-6">
+
+  {/* Soft background circles */}
+  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-blue-100/60 blur-3xl" />
+    <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-indigo-100/50 blur-3xl" />
+  </div>
+
+  <div className="relative px-5 py-5 sm:px-6 lg:px-7">
+
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+
+      {/* LEFT CONTENT */}
+      <div className="flex items-start gap-4">
+
+        {/* Icon */}
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-200">
+          <BriefcaseBusiness size={22} strokeWidth={2} />
+        </div>
+
+        <div>
+
+          {/* Breadcrumb */}
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-medium">
+            <span className="text-gray-400">
+              Recruiter
+            </span>
+
+            <span className="text-gray-300">
+              /
+            </span>
+
+            <span className="text-blue-600">
+              My Jobs
+            </span>
+          </div>
+
+          {/* Title */}
+          <div className="flex flex-wrap items-center gap-2">
+
+            <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">
               My Jobs
             </h1>
 
-            <p className="mt-0.5 text-xs text-gray-400">
-              Manage and track all your job postings
-            </p>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-600">
+              {stats.total} {stats.total === 1 ? "Job" : "Jobs"}
+            </span>
+
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Refresh */}
+          <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+            Manage, monitor and track your job postings.
+          </p>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRefresh();
-              }}
-              disabled={
-                loading || refreshing
-              }
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Refresh jobs"
-            >
-              <RefreshCw
-                size={17}
-                className={
-                  refreshing
-                    ? "animate-spin"
-                    : ""
-                }
-              />
-            </button>
+          {/* Mini Stats */}
+          <div className="mt-3 flex flex-wrap gap-2">
 
-            {/* Post Job */}
+            <div className="flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-
-                navigate(
-                  "/recruiter/post-job"
-                );
-              }}
-              className="flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-            >
-              <Plus size={17} />
-
-              <span className="hidden sm:inline">
-                Post a Job
+              <span className="text-[11px] font-semibold text-emerald-700">
+                {stats.active} Active
               </span>
-            </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+
+              <span className="text-[11px] font-semibold text-gray-600">
+                {stats.closed} Closed
+              </span>
+            </div>
+
+            <div className="hidden items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-3 py-1.5 sm:flex">
+              <Users
+                size={12}
+                className="text-violet-500"
+              />
+
+              <span className="text-[11px] font-semibold text-violet-700">
+                {stats.applicants} Applicants
+              </span>
+            </div>
+
           </div>
+
         </div>
-      </header>
+      </div>
+
+      {/* RIGHT ACTIONS */}
+      <div className="flex items-center gap-2 sm:gap-3">
+
+        {/* Refresh */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRefresh();
+          }}
+          disabled={loading || refreshing}
+          className="group flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          title="Refresh jobs"
+        >
+          <RefreshCw
+            size={16}
+            className={`transition-transform ${
+              refreshing
+                ? "animate-spin"
+                : "group-hover:rotate-90"
+            }`}
+          />
+        </button>
+
+        {/* Post Job */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate("/recruiter/post-job");
+          }}
+          className="group flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5 hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg sm:px-5"
+        >
+
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15">
+            <Plus
+              size={15}
+              className="transition-transform group-hover:rotate-90"
+            />
+          </span>
+
+          <span>
+            <span className="hidden sm:inline">
+              Post a Job
+            </span>
+
+            <span className="sm:hidden">
+              Post
+            </span>
+          </span>
+
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+</header>
 
       {/* =====================================================
           CONTENT
@@ -822,9 +785,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-400">
-                  Total Jobs
-                </p>
+                <p className="text-xs font-medium text-gray-400">Total Jobs</p>
 
                 <h2 className="mt-2 text-2xl font-bold text-gray-900">
                   {stats.total}
@@ -832,15 +793,11 @@ const MyJobs = () => {
               </div>
 
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <BriefcaseBusiness
-                  size={19}
-                />
+                <BriefcaseBusiness size={19} />
               </div>
             </div>
 
-            <p className="mt-3 text-[11px] text-gray-400">
-              All posted jobs
-            </p>
+            <p className="mt-3 text-[11px] text-gray-400">All posted jobs</p>
           </div>
 
           {/* Active Jobs */}
@@ -848,9 +805,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-400">
-                  Active Jobs
-                </p>
+                <p className="text-xs font-medium text-gray-400">Active Jobs</p>
 
                 <h2 className="mt-2 text-2xl font-bold text-gray-900">
                   {stats.active}
@@ -858,9 +813,7 @@ const MyJobs = () => {
               </div>
 
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <CheckCircle2
-                  size={19}
-                />
+                <CheckCircle2 size={19} />
               </div>
             </div>
 
@@ -874,9 +827,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-400">
-                  Applicants
-                </p>
+                <p className="text-xs font-medium text-gray-400">Applicants</p>
 
                 <h2 className="mt-2 text-2xl font-bold text-gray-900">
                   {stats.applicants}
@@ -888,9 +839,7 @@ const MyJobs = () => {
               </div>
             </div>
 
-            <p className="mt-3 text-[11px] text-gray-400">
-              Across all jobs
-            </p>
+            <p className="mt-3 text-[11px] text-gray-400">Across all jobs</p>
           </div>
 
           {/* Views */}
@@ -898,9 +847,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-400">
-                  Total Views
-                </p>
+                <p className="text-xs font-medium text-gray-400">Total Views</p>
 
                 <h2 className="mt-2 text-2xl font-bold text-gray-900">
                   {stats.views.toLocaleString()}
@@ -912,9 +859,7 @@ const MyJobs = () => {
               </div>
             </div>
 
-            <p className="mt-3 text-[11px] text-gray-400">
-              Job profile views
-            </p>
+            <p className="mt-3 text-[11px] text-gray-400">Job profile views</p>
           </div>
         </div>
 
@@ -951,14 +896,8 @@ const MyJobs = () => {
                   <input
                     type="text"
                     value={search}
-                    onChange={(e) =>
-                      setSearch(
-                        e.target.value
-                      )
-                    }
-                    onClick={(e) =>
-                      e.stopPropagation()
-                    }
+                    onChange={(e) => setSearch(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
                     placeholder="Search jobs..."
                     className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 sm:w-64"
                   />
@@ -973,30 +912,16 @@ const MyJobs = () => {
                   />
 
                   <select
-                    value={
-                      statusFilter
-                    }
-                    onChange={(e) =>
-                      setStatusFilter(
-                        e.target.value
-                      )
-                    }
-                    onClick={(e) =>
-                      e.stopPropagation()
-                    }
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
                     className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-9 text-sm text-gray-600 outline-none transition focus:border-blue-500 focus:bg-white sm:w-36"
                   >
-                    <option value="All">
-                      All Status
-                    </option>
+                    <option value="All">All Status</option>
 
-                    <option value="Active">
-                      Active
-                    </option>
+                    <option value="Active">Active</option>
 
-                    <option value="Closed">
-                      Closed
-                    </option>
+                    <option value="Closed">Closed</option>
                   </select>
 
                   <ChevronDown
@@ -1014,18 +939,13 @@ const MyJobs = () => {
 
           {loading && (
             <div className="flex flex-col items-center justify-center px-6 py-20">
-              <Loader2
-                size={30}
-                className="animate-spin text-blue-500"
-              />
+              <Loader2 size={30} className="animate-spin text-blue-500" />
 
               <p className="mt-4 text-sm font-medium text-gray-600">
                 Loading your jobs...
               </p>
 
-              <p className="mt-1 text-xs text-gray-400">
-                Please wait
-              </p>
+              <p className="mt-1 text-xs text-gray-400">Please wait</p>
             </div>
           )}
 
@@ -1036,9 +956,7 @@ const MyJobs = () => {
           {!loading && error && (
             <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-500">
-                <AlertCircle
-                  size={25}
-                />
+                <AlertCircle size={25} />
               </div>
 
               <h3 className="mt-4 text-sm font-bold text-gray-800">
@@ -1051,9 +969,7 @@ const MyJobs = () => {
 
               <button
                 type="button"
-                onClick={() =>
-                  fetchMyJobs()
-                }
+                onClick={() => fetchMyJobs()}
                 className="mt-5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
               >
                 Try Again
@@ -1106,260 +1022,165 @@ const MyJobs = () => {
                   </thead>
 
                   <tbody>
-                    {filteredJobs.length >
-                    0 ? (
-                      filteredJobs.map(
-                        (job) => (
-                          <tr
-                            key={job.id}
-                            className="border-b border-gray-100 last:border-0 transition hover:bg-gray-50/60"
-                          >
-                            {/* JOB */}
+                    {filteredJobs.length > 0 ? (
+                      filteredJobs.map((job) => (
+                        <tr
+                          key={job.id}
+                          className="border-b border-gray-100 last:border-0 transition hover:bg-gray-50/60"
+                        >
+                          {/* JOB */}
 
-                            <td className="px-6 py-5">
-                              <div className="flex items-start gap-3">
-                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                                  <BriefcaseBusiness
-                                    size={19}
-                                  />
-                                </div>
+                          <td className="px-6 py-5">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <BriefcaseBusiness size={19} />
+                              </div>
 
-                                <div className="min-w-0">
-                                  <h3 className="max-w-[250px] truncate text-sm font-bold text-gray-900">
-                                    {
-                                      job.title
-                                    }
-                                  </h3>
+                              <div className="min-w-0">
+                                <h3 className="max-w-[250px] truncate text-sm font-bold text-gray-900">
+                                  {job.title}
+                                </h3>
 
-                                  <p className="mt-1 text-xs text-gray-400">
-                                    {
-                                      job.category
-                                    }
-                                  </p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  {job.category}
+                                </p>
 
-                                  <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {job.skills
-                                      .slice(
-                                        0,
-                                        3
-                                      )
-                                      .map(
-                                        (
-                                          skill,
-                                          index
-                                        ) => (
-                                          <span
-                                            key={`${skill}-${index}`}
-                                            className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-500"
-                                          >
-                                            {
-                                              skill
-                                            }
-                                          </span>
-                                        )
-                                      )}
-                                  </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {job.skills
+                                    .slice(0, 3)
+                                    .map((skill, index) => (
+                                      <span
+                                        key={`${skill}-${index}`}
+                                        className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-500"
+                                      >
+                                        {skill}
+                                      </span>
+                                    ))}
                                 </div>
                               </div>
-                            </td>
+                            </div>
+                          </td>
 
-                            {/* DETAILS */}
+                          {/* DETAILS */}
 
-                            <td className="px-4 py-5">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                  <MapPin
-                                    size={
-                                      14
-                                    }
-                                    className="text-gray-400"
-                                  />
+                          <td className="px-4 py-5">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <MapPin size={14} className="text-gray-400" />
 
-                                  <span className="max-w-[180px] truncate">
-                                    {
-                                      job.location
-                                    }
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                  <BriefcaseBusiness
-                                    size={
-                                      14
-                                    }
-                                    className="text-gray-400"
-                                  />
-
-                                  {
-                                    job.type
-                                  }
-                                </div>
-
-                                <div className="text-xs font-semibold text-gray-700">
-                                  {
-                                    job.salary
-                                  }
-                                </div>
+                                <span className="max-w-[180px] truncate">
+                                  {job.location}
+                                </span>
                               </div>
-                            </td>
 
-                            {/* APPLICANTS */}
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <BriefcaseBusiness
+                                  size={14}
+                                  className="text-gray-400"
+                                />
 
-                            <td className="px-4 py-5 text-center">
+                                {job.type}
+                              </div>
+
+                              <div className="text-xs font-semibold text-gray-700">
+                                {job.salary}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* APPLICANTS */}
+
+                          <td className="px-4 py-5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => viewApplicants(job)}
+                              className="group inline-flex flex-col items-center"
+                            >
+                              <span className="text-sm font-bold text-gray-900 group-hover:text-blue-600">
+                                {job.applicants}
+                              </span>
+
+                              <span className="mt-1 text-[10px] text-gray-400 group-hover:text-blue-500">
+                                applicants
+                              </span>
+                            </button>
+                          </td>
+
+                          {/* VIEWS */}
+
+                          <td className="px-4 py-5 text-center">
+                            <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                              <Eye size={14} className="text-gray-400" />
+
+                              {job.views.toLocaleString()}
+                            </div>
+                          </td>
+
+                          {/* DEADLINE */}
+
+                          <td className="px-4 py-5">
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <CalendarDays
+                                size={14}
+                                className="text-gray-400"
+                              />
+
+                              {job.deadline}
+                            </div>
+
+                            <p className="mt-1 text-[10px] text-gray-400">
+                              Posted {job.posted}
+                            </p>
+                          </td>
+
+                          {/* STATUS */}
+
+                          <td className="px-4 py-5">
+                            <JobStatus
+                              status={job.status}
+                              statusConfig={statusConfig}
+                            />
+                          </td>
+
+                          {/* ACTION */}
+
+                          <td className="px-5 py-5 text-right">
+                            <div
+                              className="relative inline-block"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <button
                                 type="button"
                                 onClick={() =>
-                                  viewApplicants(
-                                    job
+                                  setOpenMenu(
+                                    openMenu === job.id ? null : job.id,
                                   )
                                 }
-                                className="group inline-flex flex-col items-center"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
                               >
-                                <span className="text-sm font-bold text-gray-900 group-hover:text-blue-600">
-                                  {
-                                    job.applicants
-                                  }
-                                </span>
-
-                                <span className="mt-1 text-[10px] text-gray-400 group-hover:text-blue-500">
-                                  applicants
-                                </span>
+                                <MoreVertical size={18} />
                               </button>
-                            </td>
 
-                            {/* VIEWS */}
-
-                            <td className="px-4 py-5 text-center">
-                              <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-                                <Eye
-                                  size={
-                                    14
-                                  }
-                                  className="text-gray-400"
+                              {openMenu === job.id && (
+                                <JobActionMenu
+                                  job={job}
+                                  onView={() => viewJob(job)}
+                                  onEdit={() => editJob(job)}
+                                  onApplicants={() => viewApplicants(job)}
+                                  onToggle={() => toggleJobStatus(job)}
+                                  onDelete={() => deleteJob(job)}
                                 />
-
-                                {job.views.toLocaleString()}
-                              </div>
-                            </td>
-
-                            {/* DEADLINE */}
-
-                            <td className="px-4 py-5">
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <CalendarDays
-                                  size={
-                                    14
-                                  }
-                                  className="text-gray-400"
-                                />
-
-                                {
-                                  job.deadline
-                                }
-                              </div>
-
-                              <p className="mt-1 text-[10px] text-gray-400">
-                                Posted{" "}
-                                {
-                                  job.posted
-                                }
-                              </p>
-                            </td>
-
-                            {/* STATUS */}
-
-                            <td className="px-4 py-5">
-                              <JobStatus
-                                status={
-                                  job.status
-                                }
-                                statusConfig={
-                                  statusConfig
-                                }
-                              />
-                            </td>
-
-                            {/* ACTION */}
-
-                            <td className="px-5 py-5 text-right">
-                              <div
-                                className="relative inline-block"
-                                onClick={(
-                                  e
-                                ) =>
-                                  e.stopPropagation()
-                                }
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setOpenMenu(
-                                      openMenu ===
-                                        job.id
-                                        ? null
-                                        : job.id
-                                    )
-                                  }
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-                                >
-                                  <MoreVertical
-                                    size={
-                                      18
-                                    }
-                                  />
-                                </button>
-
-                                {openMenu ===
-                                  job.id && (
-                                  <JobActionMenu
-                                    job={
-                                      job
-                                    }
-                                    onView={() =>
-                                      viewJob(
-                                        job
-                                      )
-                                    }
-                                    onEdit={() =>
-                                      editJob(
-                                        job
-                                      )
-                                    }
-                                    onApplicants={() =>
-                                      viewApplicants(
-                                        job
-                                      )
-                                    }
-                                    onToggle={() =>
-                                      toggleJobStatus(
-                                        job
-                                      )
-                                    }
-                                    onDelete={() =>
-                                      deleteJob(
-                                        job
-                                      )
-                                    }
-                                  />
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      )
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     ) : (
                       <tr>
-                        <td
-                          colSpan="7"
-                          className="px-6 py-16 text-center"
-                        >
+                        <td colSpan="7" className="px-6 py-16 text-center">
                           <EmptyState
                             hasSearch={
-                              Boolean(
-                                search
-                              ) ||
-                              statusFilter !==
-                                "All"
+                              Boolean(search) || statusFilter !== "All"
                             }
                           />
                         </td>
@@ -1374,283 +1195,170 @@ const MyJobs = () => {
               ========================================== */}
 
               <div className="divide-y divide-gray-100 lg:hidden">
-                {filteredJobs.length >
-                0 ? (
-                  filteredJobs.map(
-                    (job) => (
-                      <div
-                        key={job.id}
-                        className="p-5 transition hover:bg-gray-50/60 sm:p-6"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                              <BriefcaseBusiness
-                                size={
-                                  19
-                                }
-                              />
-                            </div>
-
-                            <div className="min-w-0">
-                              <h3 className="truncate text-sm font-bold text-gray-900">
-                                {
-                                  job.title
-                                }
-                              </h3>
-
-                              <p className="mt-1 text-xs text-gray-400">
-                                {
-                                  job.category
-                                }
-                              </p>
-
-                              <p className="mt-1 text-xs font-medium text-gray-500">
-                                {
-                                  job.companyName
-                                }
-                              </p>
-                            </div>
+                {filteredJobs.length > 0 ? (
+                  filteredJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      className="p-5 transition hover:bg-gray-50/60 sm:p-6"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                            <BriefcaseBusiness size={19} />
                           </div>
 
-                          <div
-                            className="relative shrink-0"
-                            onClick={(
-                              e
-                            ) =>
-                              e.stopPropagation()
-                            }
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenMenu(
-                                  openMenu ===
-                                    job.id
-                                    ? null
-                                    : job.id
-                                )
-                              }
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
-                            >
-                              <MoreVertical
-                                size={
-                                  18
-                                }
-                              />
-                            </button>
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-bold text-gray-900">
+                              {job.title}
+                            </h3>
 
-                            {openMenu ===
-                              job.id && (
-                              <JobActionMenu
-                                job={job}
-                                onView={() =>
-                                  viewJob(
-                                    job
-                                  )
-                                }
-                                onEdit={() =>
-                                  editJob(
-                                    job
-                                  )
-                                }
-                                onApplicants={() =>
-                                  viewApplicants(
-                                    job
-                                  )
-                                }
-                                onToggle={() =>
-                                  toggleJobStatus(
-                                    job
-                                  )
-                                }
-                                onDelete={() =>
-                                  deleteJob(
-                                    job
-                                  )
-                                }
-                              />
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                          {/* Location */}
-
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                              <MapPin
-                                size={
-                                  13
-                                }
-                              />
-                              Location
-                            </div>
-
-                            <p className="mt-1 truncate text-xs font-semibold text-gray-700">
-                              {
-                                job.location
-                              }
+                            <p className="mt-1 text-xs text-gray-400">
+                              {job.category}
                             </p>
-                          </div>
 
-                          {/* Applicants */}
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              viewApplicants(
-                                job
-                              )
-                            }
-                            className="rounded-xl bg-gray-50 p-3 text-left transition hover:bg-blue-50"
-                          >
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                              <Users
-                                size={
-                                  13
-                                }
-                              />
-                              Applicants
-                            </div>
-
-                            <p className="mt-1 text-xs font-semibold text-gray-700">
-                              {
-                                job.applicants
-                              }
-                            </p>
-                          </button>
-
-                          {/* Views */}
-
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                              <Eye
-                                size={
-                                  13
-                                }
-                              />
-                              Views
-                            </div>
-
-                            <p className="mt-1 text-xs font-semibold text-gray-700">
-                              {job.views.toLocaleString()}
-                            </p>
-                          </div>
-
-                          {/* Deadline */}
-
-                          <div className="rounded-xl bg-gray-50 p-3">
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                              <CalendarDays
-                                size={
-                                  13
-                                }
-                              />
-                              Deadline
-                            </div>
-
-                            <p className="mt-1 truncate text-xs font-semibold text-gray-700">
-                              {
-                                job.deadline
-                              }
+                            <p className="mt-1 text-xs font-medium text-gray-500">
+                              {job.companyName}
                             </p>
                           </div>
                         </div>
 
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-wrap gap-1.5">
-                            {job.skills
-                              .map(
-                                (
-                                  skill,
-                                  index
-                                ) => (
-                                  <span
-                                    key={`${skill}-${index}`}
-                                    className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-500"
-                                  >
-                                    {
-                                      skill
-                                    }
-                                  </span>
-                                )
-                              )}
-                          </div>
-
-                          <JobStatus
-                            status={
-                              job.status
-                            }
-                            statusConfig={
-                              statusConfig
-                            }
-                          />
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div
+                          className="relative shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <button
                             type="button"
                             onClick={() =>
-                              viewJob(
-                                job
-                              )
+                              setOpenMenu(openMenu === job.id ? null : job.id)
                             }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
                           >
-                            <Eye
-                              size={
-                                14
-                              }
-                            />
-                            View
+                            <MoreVertical size={18} />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              editJob(
-                                job
-                              )
-                            }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
-                          >
-                            <Edit3
-                              size={
-                                14
-                              }
+                          {openMenu === job.id && (
+                            <JobActionMenu
+                              job={job}
+                              onView={() => viewJob(job)}
+                              onEdit={() => editJob(job)}
+                              onApplicants={() => viewApplicants(job)}
+                              onToggle={() => toggleJobStatus(job)}
+                              onDelete={() => deleteJob(job)}
                             />
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              viewApplicants(
-                                job
-                              )
-                            }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
-                          >
-                            <Users
-                              size={
-                                14
-                              }
-                            />
-                            Applicants
-                          </button>
+                          )}
                         </div>
                       </div>
-                    )
-                  )
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {/* Location */}
+
+                        <div className="rounded-xl bg-gray-50 p-3">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                            <MapPin size={13} />
+                            Location
+                          </div>
+
+                          <p className="mt-1 truncate text-xs font-semibold text-gray-700">
+                            {job.location}
+                          </p>
+                        </div>
+
+                        {/* Applicants */}
+
+                        <button
+                          type="button"
+                          onClick={() => viewApplicants(job)}
+                          className="rounded-xl bg-gray-50 p-3 text-left transition hover:bg-blue-50"
+                        >
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                            <Users size={13} />
+                            Applicants
+                          </div>
+
+                          <p className="mt-1 text-xs font-semibold text-gray-700">
+                            {job.applicants}
+                          </p>
+                        </button>
+
+                        {/* Views */}
+
+                        <div className="rounded-xl bg-gray-50 p-3">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                            <Eye size={13} />
+                            Views
+                          </div>
+
+                          <p className="mt-1 text-xs font-semibold text-gray-700">
+                            {job.views.toLocaleString()}
+                          </p>
+                        </div>
+
+                        {/* Deadline */}
+
+                        <div className="rounded-xl bg-gray-50 p-3">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                            <CalendarDays size={13} />
+                            Deadline
+                          </div>
+
+                          <p className="mt-1 truncate text-xs font-semibold text-gray-700">
+                            {job.deadline}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {job.skills.map((skill, index) => (
+                            <span
+                              key={`${skill}-${index}`}
+                              className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-500"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+
+                        <JobStatus
+                          status={job.status}
+                          statusConfig={statusConfig}
+                        />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => viewJob(job)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
+                        >
+                          <Eye size={14} />
+                          View
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => editJob(job)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
+                        >
+                          <Edit3 size={14} />
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => viewApplicants(job)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:border-blue-200 hover:text-blue-600"
+                        >
+                          <Users size={14} />
+                          Applicants
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 ) : (
                   <div className="px-5 py-16">
                     <EmptyState
-                      hasSearch={
-                        Boolean(search) ||
-                        statusFilter !==
-                          "All"
-                      }
+                      hasSearch={Boolean(search) || statusFilter !== "All"}
                     />
                   </div>
                 )}
@@ -1667,9 +1375,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600">
-                <ArrowUpRight
-                  size={18}
-                />
+                <ArrowUpRight size={18} />
               </div>
 
               <div>
@@ -1678,10 +1384,8 @@ const MyJobs = () => {
                 </h3>
 
                 <p className="mt-1 text-xs leading-5 text-blue-700">
-                  Add complete job details,
-                  relevant skills and salary
-                  information to attract more
-                  qualified candidates.
+                  Add complete job details, relevant skills and salary
+                  information to attract more qualified candidates.
                 </p>
               </div>
             </div>
@@ -1690,9 +1394,7 @@ const MyJobs = () => {
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-600">
-                <Clock3
-                  size={18}
-                />
+                <Clock3 size={18} />
               </div>
 
               <div>
@@ -1701,18 +1403,14 @@ const MyJobs = () => {
                 </h3>
 
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Close positions that are
-                  no longer hiring and keep
-                  active jobs updated for
-                  better candidate engagement.
+                  Close positions that are no longer hiring and keep active jobs
+                  updated for better candidate engagement.
                 </p>
               </div>
             </div>
           </div>
         </div>
       </main>
-
-    
     </div>
   );
 };
@@ -1721,21 +1419,14 @@ const MyJobs = () => {
    JOB STATUS
 ========================================================= */
 
-const JobStatus = ({
-  status,
-  statusConfig,
-}) => {
-  const config =
-    statusConfig[status] ||
-    statusConfig.Active;
+const JobStatus = ({ status, statusConfig }) => {
+  const config = statusConfig[status] || statusConfig.Active;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${config.className}`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${config.dot}`}
-      />
+      <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
 
       {status}
     </span>
@@ -1757,9 +1448,7 @@ const JobActionMenu = ({
   return (
     <div
       className="absolute right-0 top-10 z-50 w-48 overflow-hidden rounded-xl border border-gray-100 bg-white py-1.5 text-left shadow-xl"
-      onClick={(e) =>
-        e.stopPropagation()
-      }
+      onClick={(e) => e.stopPropagation()}
     >
       {/* View */}
 
@@ -1834,21 +1523,15 @@ const JobActionMenu = ({
    EMPTY STATE
 ========================================================= */
 
-const EmptyState = ({
-  hasSearch,
-}) => {
+const EmptyState = ({ hasSearch }) => {
   return (
     <div className="flex flex-col items-center justify-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
-        <BriefcaseBusiness
-          size={25}
-        />
+        <BriefcaseBusiness size={25} />
       </div>
 
       <h3 className="mt-4 text-sm font-bold text-gray-800">
-        {hasSearch
-          ? "No jobs found"
-          : "No jobs posted yet"}
+        {hasSearch ? "No jobs found" : "No jobs posted yet"}
       </h3>
 
       <p className="mt-1 max-w-xs text-center text-xs leading-5 text-gray-400">

@@ -16,6 +16,12 @@ import {
   Users,
   Upload,
   Image as ImageIcon,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Ban,
+  Clock,
+  ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -93,6 +99,92 @@ const getLogoUrl = (logo) => {
 };
 
 /* =========================================================
+   Company Status Configuration
+========================================================= */
+
+const COMPANY_STATUS_CONFIG = {
+  pending: {
+    title: "Company Approval Pending",
+    message:
+      "Your company is waiting for admin approval. You cannot post jobs until your company is approved.",
+    shortMessage: "Waiting for admin approval.",
+    icon: Clock3,
+    wrapper:
+      "border-amber-200 bg-amber-50",
+    iconWrapper:
+      "bg-amber-100 text-amber-700",
+    titleClass:
+      "text-amber-900",
+    textClass:
+      "text-amber-800",
+  },
+
+  approved: {
+    title: "Company Approved",
+    message:
+      "Your company has been approved by admin. You can now post jobs.",
+    shortMessage: "You can post jobs.",
+    icon: CheckCircle2,
+    wrapper:
+      "border-emerald-200 bg-emerald-50",
+    iconWrapper:
+      "bg-emerald-100 text-emerald-700",
+    titleClass:
+      "text-emerald-900",
+    textClass:
+      "text-emerald-800",
+  },
+
+  rejected: {
+    title: "Company Rejected",
+    message:
+      "Your company application has been rejected by admin. You cannot post jobs.",
+    shortMessage: "Company approval was rejected.",
+    icon: XCircle,
+    wrapper:
+      "border-red-200 bg-red-50",
+    iconWrapper:
+      "bg-red-100 text-red-700",
+    titleClass:
+      "text-red-900",
+    textClass:
+      "text-red-800",
+  },
+
+  suspended: {
+    title: "Company Suspended",
+    message:
+      "Your company is temporarily suspended by admin. You cannot post jobs until the suspension is removed.",
+    shortMessage: "Company is temporarily suspended.",
+    icon: ShieldAlert,
+    wrapper:
+      "border-orange-200 bg-orange-50",
+    iconWrapper:
+      "bg-orange-100 text-orange-700",
+    titleClass:
+      "text-orange-900",
+    textClass:
+      "text-orange-800",
+  },
+
+  blocked: {
+    title: "Company Blocked",
+    message:
+      "Your company has been blocked by admin. You cannot post jobs.",
+    shortMessage: "Company is blocked.",
+    icon: Ban,
+    wrapper:
+      "border-red-200 bg-red-50",
+    iconWrapper:
+      "bg-red-100 text-red-700",
+    titleClass:
+      "text-red-900",
+    textClass:
+      "text-red-800",
+  },
+};
+
+/* =========================================================
    Component
 ========================================================= */
 
@@ -114,11 +206,16 @@ const PostJob = () => {
   const [companyLoading, setCompanyLoading] = useState(true);
   const [companyError, setCompanyError] = useState("");
 
+  const [companyStatus, setCompanyStatus] = useState("");
+  const [companyId, setCompanyId] = useState(null);
+  const [companyMessage, setCompanyMessage] = useState("");
+  const [canPostJob, setCanPostJob] = useState(false);
+
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
 
   /* =========================================================
-     Recruiter Session
+     Recruiter Session + Company Status From LocalStorage
   ========================================================= */
 
   useEffect(() => {
@@ -142,7 +239,31 @@ const PostJob = () => {
       if (user?.role?.toLowerCase() !== "recruiter") {
         alert("Only recruiters can post jobs.");
         navigate("/", { replace: true });
+        return;
       }
+
+      /*
+        Login API se company status aata hai.
+      */
+
+      const status = String(
+        user?.company_status || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const allowed =
+        user?.can_post_job === true ||
+        user?.can_post_job === 1 ||
+        user?.can_post_job === "1" ||
+        status === "approved";
+
+      setCompanyStatus(status);
+      setCompanyId(user?.company_id || null);
+      setCompanyMessage(
+        user?.company_message || ""
+      );
+      setCanPostJob(allowed && status === "approved");
     } catch (error) {
       console.error("Session Error:", error);
 
@@ -172,7 +293,9 @@ const PostJob = () => {
         ]);
 
         if (jobResponse.data?.success) {
-          setJobTypes(jobResponse.data.jobTypes || []);
+          setJobTypes(
+            jobResponse.data.jobTypes || []
+          );
         }
 
         if (workplaceResponse.data?.success) {
@@ -182,7 +305,9 @@ const PostJob = () => {
         }
 
         if (categoryResponse.data?.success) {
-          setCategories(categoryResponse.data.categories || []);
+          setCategories(
+            categoryResponse.data.categories || []
+          );
         }
       } catch (error) {
         console.error("Options Error:", error);
@@ -200,7 +325,7 @@ const PostJob = () => {
   }, []);
 
   /* =========================================================
-     Load Company Profile
+     Load Company Profile + Latest Status
   ========================================================= */
 
   useEffect(() => {
@@ -221,22 +346,80 @@ const PostJob = () => {
           return;
         }
 
+        const recruiterId = Number(user.id);
+
         const response = await axios.get(
-          `${COMPANY_PROFILE_API}?recruiterId=${Number(user.id)}`
+          `${COMPANY_PROFILE_API}?recruiterId=${recruiterId}`
         );
 
-        console.log("Company Profile Response:", response.data);
+        console.log(
+          "Company Profile Response:",
+          response.data
+        );
 
         const result = response.data;
 
         if (result?.success && result?.data) {
+          const companyData = result.data;
+
           const companyName =
-            result.data.company_name || "";
+            companyData.company_name || "";
 
           const companyLogo =
-            result.data.company_logo ||
-            result.data.logo ||
+            companyData.company_logo ||
+            companyData.logo ||
             "";
+
+          /*
+            Backend company profile ke different possible
+            status field names ko support kar rahe hain.
+          */
+
+          const latestStatus = String(
+            companyData.status ||
+              companyData.company_status ||
+              user?.company_status ||
+              ""
+          )
+            .trim()
+            .toLowerCase();
+
+          const latestCompanyId =
+            companyData.id ||
+            companyData.company_id ||
+            user?.company_id ||
+            null;
+
+          let latestCanPost =
+            latestStatus === "approved";
+
+          /*
+            Local user object ko latest company status ke saath
+            update kar do.
+          */
+
+          const updatedUser = {
+            ...user,
+            company_id: latestCompanyId,
+            company_name: companyName,
+            company_status: latestStatus,
+            company_message:
+              getStatusMessage(latestStatus),
+            can_post_job: latestCanPost,
+          };
+
+          localStorage.setItem(
+            "user",
+            JSON.stringify(updatedUser)
+          );
+
+          setCompanyId(latestCompanyId);
+          setCompanyStatus(latestStatus);
+          setCanPostJob(latestCanPost);
+
+          setCompanyMessage(
+            getStatusMessage(latestStatus)
+          );
 
           setFormData((previous) => ({
             ...previous,
@@ -244,7 +427,9 @@ const PostJob = () => {
           }));
 
           if (companyLogo) {
-            setLogoPreview(getLogoUrl(companyLogo));
+            setLogoPreview(
+              getLogoUrl(companyLogo)
+            );
           }
 
           if (!companyName) {
@@ -253,6 +438,11 @@ const PostJob = () => {
             );
           }
         } else {
+          /*
+            Agar profile API status return nahi karta,
+            localStorage status preserve karenge.
+          */
+
           setCompanyError(
             result?.message ||
               "Company profile not found."
@@ -263,6 +453,41 @@ const PostJob = () => {
           "Company Profile Error:",
           error
         );
+
+        /*
+          Agar company profile API fail ho jaye,
+          login ke time mila status use hoga.
+        */
+
+        const storedUserAgain =
+          localStorage.getItem("user");
+
+        try {
+          if (storedUserAgain) {
+            const userAgain =
+              JSON.parse(storedUserAgain);
+
+            const status = String(
+              userAgain?.company_status || ""
+            )
+              .trim()
+              .toLowerCase();
+
+            setCompanyStatus(status);
+            setCompanyMessage(
+              userAgain?.company_message ||
+                getStatusMessage(status)
+            );
+            setCanPostJob(
+              status === "approved"
+            );
+          }
+        } catch (parseError) {
+          console.error(
+            "Fallback User Parse Error:",
+            parseError
+          );
+        }
 
         setCompanyError(
           error.response?.data?.message ||
@@ -275,6 +500,34 @@ const PostJob = () => {
 
     fetchCompanyProfile();
   }, []);
+
+  /* =========================================================
+     Status Message Helper
+  ========================================================= */
+
+  const getStatusMessage = (status) => {
+    const normalizedStatus = String(
+      status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (
+      COMPANY_STATUS_CONFIG[
+        normalizedStatus
+      ]
+    ) {
+      return COMPANY_STATUS_CONFIG[
+        normalizedStatus
+      ].message;
+    }
+
+    if (!normalizedStatus) {
+      return "Please add your company and wait for admin approval before posting jobs.";
+    }
+
+    return "Your company is not approved. You cannot post jobs.";
+  };
 
   /* =========================================================
      Input Change
@@ -314,7 +567,8 @@ const PostJob = () => {
       URL.revokeObjectURL(logoPreview);
     }
 
-    const previewUrl = URL.createObjectURL(file);
+    const previewUrl =
+      URL.createObjectURL(file);
 
     setLogoFile(file);
     setLogoPreview(previewUrl);
@@ -344,7 +598,8 @@ const PostJob = () => {
 
     const exists = skills.some(
       (item) =>
-        item.toLowerCase() === skill.toLowerCase()
+        item.toLowerCase() ===
+        skill.toLowerCase()
     );
 
     if (exists) {
@@ -363,7 +618,8 @@ const PostJob = () => {
   const removeSkill = (skillToRemove) => {
     setSkills((previous) =>
       previous.filter(
-        (skill) => skill !== skillToRemove
+        (skill) =>
+          skill !== skillToRemove
       )
     );
   };
@@ -384,7 +640,12 @@ const PostJob = () => {
       URL.revokeObjectURL(logoPreview);
     }
 
-    setFormData(initialFormData);
+    setFormData({
+      ...initialFormData,
+      companyName:
+        formData.companyName,
+    });
+
     setSkills([]);
     setSkillInput("");
     setLogoFile(null);
@@ -413,6 +674,90 @@ const PostJob = () => {
   };
 
   /* =========================================================
+     Refresh Local Company Status
+  ========================================================= */
+
+  const refreshLocalCompanyStatus = (
+    status,
+    message,
+    companyData = {}
+  ) => {
+    const storedUser =
+      localStorage.getItem("user");
+
+    if (!storedUser) return;
+
+    try {
+      const user = JSON.parse(storedUser);
+
+      const normalizedStatus = String(
+        status || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const updatedUser = {
+        ...user,
+        company_id:
+          companyData.company_id ||
+          companyData.id ||
+          user.company_id ||
+          null,
+        company_name:
+          companyData.company_name ||
+          user.company_name ||
+          formData.companyName ||
+          "",
+        company_status:
+          normalizedStatus,
+        company_message:
+          message ||
+          getStatusMessage(
+            normalizedStatus
+          ),
+        can_post_job:
+          normalizedStatus === "approved",
+      };
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(updatedUser)
+      );
+
+      setCompanyId(
+        updatedUser.company_id
+      );
+
+      setCompanyStatus(
+        normalizedStatus
+      );
+
+      setCompanyMessage(
+        updatedUser.company_message
+      );
+
+      setCanPostJob(
+        normalizedStatus === "approved"
+      );
+
+      if (
+        updatedUser.company_name
+      ) {
+        setFormData((previous) => ({
+          ...previous,
+          companyName:
+            updatedUser.company_name,
+        }));
+      }
+    } catch (error) {
+      console.error(
+        "Status Refresh Error:",
+        error
+      );
+    }
+  };
+
+  /* =========================================================
      Submit Job
   ========================================================= */
 
@@ -420,6 +765,10 @@ const PostJob = () => {
     event.preventDefault();
 
     if (loading) return;
+
+    /* -------------------------------------------------------
+       Session
+    ------------------------------------------------------- */
 
     const storedUser =
       localStorage.getItem("user");
@@ -435,7 +784,10 @@ const PostJob = () => {
     try {
       user = JSON.parse(storedUser);
     } catch (error) {
-      console.error("User Parse Error:", error);
+      console.error(
+        "User Parse Error:",
+        error
+      );
 
       alert(
         "Invalid session. Please login again."
@@ -460,6 +812,48 @@ const PostJob = () => {
       "recruiter"
     ) {
       alert("Only recruiters can post jobs.");
+      return;
+    }
+
+    /* -------------------------------------------------------
+       COMPANY APPROVAL CHECK
+    ------------------------------------------------------- */
+
+    const currentCompanyStatus =
+      String(
+        user?.company_status ||
+          companyStatus ||
+          ""
+      )
+        .trim()
+        .toLowerCase();
+
+    /*
+      Frontend par bhi block karenge.
+      Backend par bhi same check hai.
+    */
+
+    if (
+      currentCompanyStatus !==
+      "approved"
+    ) {
+      const message =
+        user?.company_message ||
+        companyMessage ||
+        getStatusMessage(
+          currentCompanyStatus
+        );
+
+      alert(message);
+
+      return;
+    }
+
+    if (!canPostJob) {
+      alert(
+        "Your company is not approved. You cannot post jobs."
+      );
+
       return;
     }
 
@@ -548,6 +942,12 @@ const PostJob = () => {
       formData.jobTitle.trim()
     );
 
+    /*
+      Backend approved company name ko final authority
+      rakhega. Frontend se bhi company name bhej rahe hain
+      because existing API structure isi ko expect karta hai.
+    */
+
     postData.append(
       "company_name",
       formData.companyName.trim()
@@ -633,7 +1033,10 @@ const PostJob = () => {
       "========== POST JOB DATA =========="
     );
 
-    for (const [key, value] of postData.entries()) {
+    for (const [
+      key,
+      value,
+    ] of postData.entries()) {
       if (value instanceof File) {
         console.log(
           key,
@@ -642,7 +1045,10 @@ const PostJob = () => {
           value.size
         );
       } else {
-        console.log(key, value);
+        console.log(
+          key,
+          value
+        );
       }
     }
 
@@ -699,7 +1105,7 @@ const PostJob = () => {
       );
 
       /* -----------------------------------------------------
-         Success
+         Backend Success
       ----------------------------------------------------- */
 
       if (
@@ -720,13 +1126,33 @@ const PostJob = () => {
       }
 
       /* -----------------------------------------------------
-         Backend returned error
+         Backend Success False
       ----------------------------------------------------- */
 
       console.error(
         "Backend returned success=false:",
         response.data
       );
+
+      /*
+        Agar backend company status bhi bhej raha hai,
+        frontend ko latest status ke saath update karo.
+      */
+
+      if (
+        response.data?.company_status
+      ) {
+        refreshLocalCompanyStatus(
+          response.data.company_status,
+          response.data.message,
+          {
+            company_id:
+              response.data.company_id,
+            company_name:
+              response.data.company_name,
+          }
+        );
+      }
 
       alert(
         response.data?.message ||
@@ -762,9 +1188,93 @@ const PostJob = () => {
         "======================================="
       );
 
+      const backendData =
+        error.response?.data;
+
       const backendMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error;
+        backendData?.message ||
+        backendData?.error;
+
+      /*
+        IMPORTANT:
+        Backend 403 COMPANY_NOT_APPROVED aaye to
+        latest company status UI me update hoga.
+      */
+
+      if (
+        error.response?.status ===
+          403 &&
+        backendData?.code ===
+          "COMPANY_NOT_APPROVED"
+      ) {
+        const rejectedStatus =
+          String(
+            backendData?.company_status ||
+              "pending"
+          )
+            .trim()
+            .toLowerCase();
+
+        refreshLocalCompanyStatus(
+          rejectedStatus,
+          backendMessage,
+          {
+            company_id:
+              backendData?.company_id ||
+              null,
+            company_name:
+              backendData?.company_name ||
+              "",
+          }
+        );
+
+        alert(
+          backendMessage ||
+            getStatusMessage(
+              rejectedStatus
+            )
+        );
+
+        return;
+      }
+
+      /*
+        Global admin job posting setting disabled
+      */
+
+      if (
+        backendData?.code ===
+        "JOB_POSTING_DISABLED"
+      ) {
+        alert(
+          backendMessage ||
+            "Job posting is currently disabled by admin."
+        );
+
+        return;
+      }
+
+      /*
+        No company found
+      */
+
+      if (
+        backendData?.code ===
+        "COMPANY_NOT_FOUND"
+      ) {
+        refreshLocalCompanyStatus(
+          "pending",
+          backendMessage ||
+            "Please add your company and wait for admin approval before posting jobs."
+        );
+
+        alert(
+          backendMessage ||
+            "Please add your company and wait for admin approval before posting jobs."
+        );
+
+        return;
+      }
 
       alert(
         backendMessage ||
@@ -774,6 +1284,31 @@ const PostJob = () => {
       setLoading(false);
     }
   };
+
+  /* =========================================================
+     Company Status UI
+  ========================================================= */
+
+  const normalizedCompanyStatus =
+    String(
+      companyStatus || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  const statusConfig =
+    COMPANY_STATUS_CONFIG[
+      normalizedCompanyStatus
+    ];
+
+  const StatusIcon =
+    statusConfig?.icon ||
+    AlertTriangle;
+
+  const isApproved =
+    normalizedCompanyStatus ===
+    "approved" &&
+    canPostJob;
 
   /* =========================================================
      Classes
@@ -835,6 +1370,84 @@ const PostJob = () => {
     <div className="min-h-screen w-full min-w-0 overflow-x-hidden bg-gray-50 text-gray-900">
       <div className="mx-auto w-full max-w-[1500px] min-w-0 p-4 sm:p-6 lg:p-8">
 
+        {/* =================================================
+            COMPANY APPROVAL STATUS
+        ================================================= */}
+
+        <div className="mb-6">
+          {companyLoading ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="h-10 w-10 animate-pulse rounded-xl bg-gray-100" />
+
+              <div className="flex-1">
+                <div className="h-4 w-48 animate-pulse rounded bg-gray-100" />
+                <div className="mt-2 h-3 w-80 max-w-full animate-pulse rounded bg-gray-100" />
+              </div>
+            </div>
+          ) : statusConfig ? (
+            <div
+              className={`rounded-2xl border p-4 shadow-sm ${statusConfig.wrapper}`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${statusConfig.iconWrapper}`}
+                >
+                  <StatusIcon size={20} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3
+                      className={`text-sm font-bold ${statusConfig.titleClass}`}
+                    >
+                      {statusConfig.title}
+                    </h3>
+
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusConfig.iconWrapper}`}
+                    >
+                      {normalizedCompanyStatus}
+                    </span>
+                  </div>
+
+                  <p
+                    className={`mt-1 text-sm ${statusConfig.textClass}`}
+                  >
+                    {companyMessage ||
+                      statusConfig.message}
+                  </p>
+
+                  {companyId && (
+                    <p
+                      className={`mt-1 text-xs opacity-70 ${statusConfig.textClass}`}
+                    >
+                      Company ID: {companyId}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                  <AlertTriangle size={20} />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-amber-900">
+                    Company Approval Required
+                  </h3>
+
+                  <p className="mt-1 text-sm text-amber-800">
+                    Please add your company and wait for admin approval before posting jobs.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <form
           id="post-job-form"
           onSubmit={handleSubmit}
@@ -879,7 +1492,9 @@ const PostJob = () => {
                     <input
                       type="text"
                       name="jobTitle"
-                      value={formData.jobTitle}
+                      value={
+                        formData.jobTitle
+                      }
                       onChange={handleChange}
                       placeholder="e.g. Senior Frontend Developer"
                       className={inputClass}
@@ -906,7 +1521,9 @@ const PostJob = () => {
                             src={logoPreview}
                             alt="Company Logo Preview"
                             className="h-full w-full object-contain p-1"
-                            onError={(event) => {
+                            onError={(
+                              event
+                            ) => {
                               event.currentTarget.style.display =
                                 "none";
                             }}
@@ -914,7 +1531,9 @@ const PostJob = () => {
 
                           <button
                             type="button"
-                            onClick={removeLogo}
+                            onClick={
+                              removeLogo
+                            }
                             className="absolute right-1 top-1 rounded-full bg-red-600 p-1 text-white shadow hover:bg-red-700"
                             title="Remove logo"
                           >
@@ -975,7 +1594,9 @@ const PostJob = () => {
                     <input
                       type="text"
                       name="companyName"
-                      value={formData.companyName}
+                      value={
+                        formData.companyName
+                      }
                       readOnly
                       placeholder={
                         companyLoading
@@ -1008,10 +1629,18 @@ const PostJob = () => {
 
                       <select
                         name="category"
-                        value={formData.category}
-                        onChange={handleChange}
-                        className={selectClass}
-                        disabled={optionsLoading}
+                        value={
+                          formData.category
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        className={
+                          selectClass
+                        }
+                        disabled={
+                          optionsLoading
+                        }
                         required
                       >
 
@@ -1025,7 +1654,9 @@ const PostJob = () => {
                           (item) => (
                             <option
                               key={item.id}
-                              value={item.name}
+                              value={
+                                item.name
+                              }
                             >
                               {item.name}
                             </option>
@@ -1055,10 +1686,18 @@ const PostJob = () => {
 
                       <select
                         name="jobType"
-                        value={formData.jobType}
-                        onChange={handleChange}
-                        className={selectClass}
-                        disabled={optionsLoading}
+                        value={
+                          formData.jobType
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        className={
+                          selectClass
+                        }
+                        disabled={
+                          optionsLoading
+                        }
                         required
                       >
 
@@ -1072,7 +1711,9 @@ const PostJob = () => {
                           (item) => (
                             <option
                               key={item.id}
-                              value={item.name}
+                              value={
+                                item.name
+                              }
                             >
                               {item.name}
                             </option>
@@ -1103,10 +1744,18 @@ const PostJob = () => {
 
                       <select
                         name="workplaceType"
-                        value={formData.workplaceType}
-                        onChange={handleChange}
-                        className={selectClass}
-                        disabled={optionsLoading}
+                        value={
+                          formData.workplaceType
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        className={
+                          selectClass
+                        }
+                        disabled={
+                          optionsLoading
+                        }
                       >
 
                         <option value="">
@@ -1119,7 +1768,9 @@ const PostJob = () => {
                           (item) => (
                             <option
                               key={item.id}
-                              value={item.name}
+                              value={
+                                item.name
+                              }
                             >
                               {item.name}
                             </option>
@@ -1155,8 +1806,12 @@ const PostJob = () => {
                       <input
                         type="text"
                         name="location"
-                        value={formData.location}
-                        onChange={handleChange}
+                        value={
+                          formData.location
+                        }
+                        onChange={
+                          handleChange
+                        }
                         placeholder="e.g. Noida, Uttar Pradesh"
                         className={`${inputClass} pl-11`}
                         required
@@ -1186,8 +1841,12 @@ const PostJob = () => {
                         name="vacancies"
                         min="1"
                         step="1"
-                        value={formData.vacancies}
-                        onChange={handleChange}
+                        value={
+                          formData.vacancies
+                        }
+                        onChange={
+                          handleChange
+                        }
                         placeholder="e.g. 4"
                         className={`${inputClass} pl-11`}
                       />
@@ -1214,7 +1873,9 @@ const PostJob = () => {
             <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition hover:shadow-md">
 
               <SectionHeader
-                icon={<DollarSign size={19} />}
+                icon={
+                  <DollarSign size={19} />
+                }
                 title="Experience & Compensation"
                 subtitle="Define eligibility requirements and salary expectations"
               />
@@ -1240,8 +1901,12 @@ const PostJob = () => {
 
                       <select
                         name="experience"
-                        value={formData.experience}
-                        onChange={handleChange}
+                        value={
+                          formData.experience
+                        }
+                        onChange={
+                          handleChange
+                        }
                         className={`${selectClass} pl-11`}
                       >
 
@@ -1299,8 +1964,12 @@ const PostJob = () => {
                       <input
                         type="text"
                         name="education"
-                        value={formData.education}
-                        onChange={handleChange}
+                        value={
+                          formData.education
+                        }
+                        onChange={
+                          handleChange
+                        }
                         placeholder="e.g. B.Tech / BCA / MCA"
                         className={`${inputClass} pl-11`}
                       />
@@ -1327,8 +1996,12 @@ const PostJob = () => {
                         type="number"
                         name="salaryMin"
                         min="0"
-                        value={formData.salaryMin}
-                        onChange={handleChange}
+                        value={
+                          formData.salaryMin
+                        }
+                        onChange={
+                          handleChange
+                        }
                         placeholder="300000"
                         className={`${inputClass} pl-9`}
                       />
@@ -1355,8 +2028,12 @@ const PostJob = () => {
                         type="number"
                         name="salaryMax"
                         min="0"
-                        value={formData.salaryMax}
-                        onChange={handleChange}
+                        value={
+                          formData.salaryMax
+                        }
+                        onChange={
+                          handleChange
+                        }
                         placeholder="600000"
                         className={`${inputClass} pl-9`}
                       />
@@ -1377,9 +2054,15 @@ const PostJob = () => {
 
                       <select
                         name="salaryType"
-                        value={formData.salaryType}
-                        onChange={handleChange}
-                        className={selectClass}
+                        value={
+                          formData.salaryType
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        className={
+                          selectClass
+                        }
                       >
 
                         <option value="Per Year">
@@ -1420,8 +2103,12 @@ const PostJob = () => {
                       <input
                         type="date"
                         name="deadline"
-                        value={formData.deadline}
-                        onChange={handleChange}
+                        value={
+                          formData.deadline
+                        }
+                        onChange={
+                          handleChange
+                        }
                         className={`${inputClass} pl-11`}
                       />
 
@@ -1442,7 +2129,9 @@ const PostJob = () => {
             <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition hover:shadow-md">
 
               <SectionHeader
-                icon={<Code2 size={19} />}
+                icon={
+                  <Code2 size={19} />
+                }
                 title="Required Skills"
                 subtitle="Add key technical or soft skills required for this job"
               />
@@ -1487,7 +2176,10 @@ const PostJob = () => {
                   <div className="mt-4 flex flex-wrap gap-2">
 
                     {skills.map(
-                      (skill, index) => (
+                      (
+                        skill,
+                        index
+                      ) => (
 
                         <span
                           key={`${skill}-${index}`}
@@ -1528,7 +2220,9 @@ const PostJob = () => {
             <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition hover:shadow-md">
 
               <SectionHeader
-                icon={<FileText size={19} />}
+                icon={
+                  <FileText size={19} />
+                }
                 title="Job Description & Requirements"
                 subtitle="Provide detailed information about roles, responsibilities, and criteria"
               />
@@ -1549,10 +2243,16 @@ const PostJob = () => {
                   <textarea
                     rows="4"
                     name="description"
-                    value={formData.description}
-                    onChange={handleChange}
+                    value={
+                      formData.description
+                    }
+                    onChange={
+                      handleChange
+                    }
                     placeholder="Write a brief overview of the role..."
-                    className={textareaClass}
+                    className={
+                      textareaClass
+                    }
                     required
                   />
 
@@ -1572,9 +2272,13 @@ const PostJob = () => {
                     value={
                       formData.responsibilities
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     placeholder="List responsibilities (bullet points or text)..."
-                    className={textareaClass}
+                    className={
+                      textareaClass
+                    }
                   />
 
                 </div>
@@ -1593,9 +2297,13 @@ const PostJob = () => {
                     value={
                       formData.requirements
                     }
-                    onChange={handleChange}
+                    onChange={
+                      handleChange
+                    }
                     placeholder="List qualifications and requirements..."
-                    className={textareaClass}
+                    className={
+                      textareaClass
+                    }
                   />
 
                 </div>
@@ -1628,9 +2336,79 @@ const PostJob = () => {
 
               <div className="space-y-4 p-5">
 
+                {/* STATUS MESSAGE */}
+
+                {!companyLoading && (
+                  <div
+                    className={`rounded-xl border p-3 ${
+                      isApproved
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-amber-200 bg-amber-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+
+                      {isApproved ? (
+                        <CheckCircle2
+                          size={17}
+                          className="mt-0.5 shrink-0 text-emerald-600"
+                        />
+                      ) : (
+                        <AlertTriangle
+                          size={17}
+                          className="mt-0.5 shrink-0 text-amber-600"
+                        />
+                      )}
+
+                      <div className="min-w-0">
+
+                        <p
+                          className={`text-xs font-bold ${
+                            isApproved
+                              ? "text-emerald-900"
+                              : "text-amber-900"
+                          }`}
+                        >
+                          {isApproved
+                            ? "Ready to publish"
+                            : "Publishing unavailable"}
+                        </p>
+
+                        <p
+                          className={`mt-1 text-xs leading-5 ${
+                            isApproved
+                              ? "text-emerald-800"
+                              : "text-amber-800"
+                          }`}
+                        >
+                          {isApproved
+                            ? "Your company is approved by admin."
+                            : companyMessage ||
+                              getStatusMessage(
+                                normalizedCompanyStatus
+                              )}
+                        </p>
+
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* PUBLISH BUTTON */}
+
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    companyLoading ||
+                    !isApproved
+                  }
+                  title={
+                    !isApproved
+                      ? "Your company must be approved by admin before posting a job."
+                      : "Publish Job"
+                  }
                   className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
 
@@ -1639,6 +2417,8 @@ const PostJob = () => {
                   <span>
                     {loading
                       ? "Posting Job..."
+                      : !isApproved
+                      ? "Approval Required"
                       : "Publish Job"}
                   </span>
 
@@ -1646,12 +2426,28 @@ const PostJob = () => {
 
                 <button
                   type="button"
-                  onClick={resetForm}
+                  onClick={
+                    resetForm
+                  }
                   disabled={loading}
                   className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                 >
                   Reset Form
                 </button>
+
+                {!isApproved && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        "/recruiter/company-profile"
+                      )
+                    }
+                    className="flex h-11 w-full items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                  >
+                    View Company Profile
+                  </button>
+                )}
 
               </div>
 
@@ -1674,7 +2470,8 @@ const PostJob = () => {
                   </span>
 
                   <span className="font-semibold text-gray-900">
-                    {formData.vacancies || 1}
+                    {formData.vacancies ||
+                      1}
                   </span>
 
                 </div>
@@ -1713,6 +2510,35 @@ const PostJob = () => {
 
                   <span className="font-semibold text-gray-900">
                     {skills.length}
+                  </span>
+
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-3">
+
+                  <span className="text-gray-500">
+                    Company Status
+                  </span>
+
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                      normalizedCompanyStatus ===
+                      "approved"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : normalizedCompanyStatus ===
+                          "rejected"
+                        ? "bg-red-100 text-red-700"
+                        : normalizedCompanyStatus ===
+                          "blocked"
+                        ? "bg-red-100 text-red-700"
+                        : normalizedCompanyStatus ===
+                          "suspended"
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {normalizedCompanyStatus ||
+                      "Pending"}
                   </span>
 
                 </div>

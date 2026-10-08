@@ -30,6 +30,9 @@ const CandidateLayout = () => {
   const [user, setUser] = useState(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
+  /* =========================================================
+     GET LOGGED-IN USER
+  ========================================================= */
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem("user");
@@ -40,6 +43,7 @@ const CandidateLayout = () => {
       }
 
       const parsedUser = JSON.parse(storedUser);
+
       const role = String(parsedUser?.role || "")
         .toLowerCase()
         .trim();
@@ -56,6 +60,9 @@ const CandidateLayout = () => {
     }
   }, [navigate]);
 
+  /* =========================================================
+     LOGOUT
+  ========================================================= */
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
@@ -67,6 +74,9 @@ const CandidateLayout = () => {
     navigate("/login");
   };
 
+  /* =========================================================
+     SIDEBAR ITEMS
+  ========================================================= */
   const sidebarItems = [
     {
       label: "Dashboard",
@@ -110,29 +120,47 @@ const CandidateLayout = () => {
     },
   ];
 
+  /* =========================================================
+     SIDEBAR
+  ========================================================= */
   const Sidebar = () => (
-    <aside className="flex h-full flex-col bg-white">
-      {/* USER MINI PROFILE */}
-      <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-base font-bold text-white shadow-sm">
-          {user?.name?.charAt(0)?.toUpperCase() || "C"}
-        </div>
+    <aside className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
+      {/* =====================================================
+          USER PROFILE
+      ===================================================== */}
+      <div className="border-b border-slate-100 px-5 py-5">
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500 text-base font-bold text-white shadow-md shadow-blue-100">
+            {user?.name?.charAt(0)?.toUpperCase() || "C"}
+          </div>
 
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">
-            {user?.name || "Candidate"}
-          </p>
-          <p className="text-xs text-slate-400">
-            Candidate account
-          </p>
+          {/* User Info */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900">
+              {user?.name || "Candidate"}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Candidate account
+            </p>
+          </div>
         </div>
       </div>
 
-      <p className="px-5 pb-2 pt-5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-        Menu
-      </p>
+      {/* =====================================================
+          MENU TITLE
+      ===================================================== */}
+      <div className="px-5 pb-2 pt-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          Candidate Menu
+        </p>
+      </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-3">
+      {/* =====================================================
+          NAVIGATION
+      ===================================================== */}
+      <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
         {sidebarItems.map((item) => {
           const Icon = item.icon;
 
@@ -146,123 +174,169 @@ const CandidateLayout = () => {
               key={item.path}
               to={item.path}
               onClick={() => setMobileMenu(false)}
-              className={`group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all duration-150 ${
+              className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-600 hover:translate-x-0.5 hover:bg-slate-50 hover:text-blue-600"
+                  ? "bg-blue-50 text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"
               }`}
             >
+              {/* Active Indicator */}
               {isActive && (
-                <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-blue-600" />
+                <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-blue-600" />
               )}
 
+              {/* Icon */}
               <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${
                   isActive
-                    ? "bg-blue-600 text-white"
+                    ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
                     : "bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600"
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={17} strokeWidth={2} />
               </span>
 
-              <span className="truncate">{item.label}</span>
+              {/* Label */}
+              <span className="truncate">
+                {item.label}
+              </span>
             </Link>
           );
         })}
       </nav>
 
+      {/* =====================================================
+          LOGOUT
+      ===================================================== */}
       <div className="border-t border-slate-100 p-3">
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+          className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 transition-all duration-200 hover:bg-red-50"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">
-            <LogOut size={16} />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 transition-all duration-200 group-hover:bg-red-100">
+            <LogOut size={17} />
           </span>
-          Logout
+
+          <span>Logout</span>
         </button>
       </div>
     </aside>
   );
 
+  /* =========================================================
+     LOADING
+  ========================================================= */
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-slate-600">Loading candidate panel...</p>
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+
+          <p className="text-sm font-medium text-slate-600">
+            Loading candidate panel...
+          </p>
+        </div>
       </div>
     );
   }
 
+  /* =========================================================
+     MAIN LAYOUT
+  ========================================================= */
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
-      {/* TOP HEADER (shared site navbar) */}
+      {/* =====================================================
+          TOP HEADER
+      ===================================================== */}
       <Header />
 
-      {/* Mobile menu toggle for the candidate sidebar (site Header has no sidebar toggle) */}
-      <div className="flex items-center border-b border-slate-200 bg-white px-4 py-2 sm:px-6 lg:hidden">
+      {/* =====================================================
+          MOBILE MENU BUTTON
+      ===================================================== */}
+      <div className="border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileMenu(true)}
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-blue-600"
         >
           <Menu size={20} />
-          Menu
+
+          <span>Menu</span>
         </button>
       </div>
 
-      {/* SIDEBAR + CONTENT */}
+      {/* =====================================================
+          SIDEBAR + CONTENT
+      ===================================================== */}
       <div className="flex flex-1">
-        {/* DESKTOP SIDEBAR */}
-        <div className="hidden w-64 shrink-0 border-r border-slate-200 bg-white shadow-sm lg:block">
-          <div className="sticky top-[72px] flex h-[calc(100vh-72px)] flex-col">
-            <Sidebar />
+        {/* ===================================================
+            DESKTOP SIDEBAR
+        =================================================== */}
+        <div className="hidden w-[300px] shrink-0 px-4 py-5 lg:block">
+          <div className="sticky top-[92px] h-[calc(100vh-112px)]">
+            <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_35px_rgba(15,23,42,0.08)]">
+              <Sidebar />
+            </div>
           </div>
         </div>
 
-        {/* MOBILE SIDEBAR */}
+        {/* ===================================================
+            MOBILE SIDEBAR
+        =================================================== */}
         {mobileMenu && (
           <>
+            {/* Backdrop */}
             <div
-              className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+              className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] lg:hidden"
               onClick={() => setMobileMenu(false)}
             />
 
-            <div className="fixed bottom-0 left-0 top-0 z-50 w-72 bg-white lg:hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 p-4">
+            {/* Drawer */}
+            <div className="fixed bottom-4 left-4 top-4 z-50 w-[calc(100%-2rem)] max-w-xs overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl lg:hidden">
+              {/* Mobile Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
                 <Link
                   to="/"
+                  onClick={() => setMobileMenu(false)}
                   className="text-xl font-extrabold text-blue-600"
                 >
-                  Job<span className="text-slate-900">Portal</span>
+                  Job
+                  <span className="text-slate-900">
+                    Portal
+                  </span>
                 </Link>
 
                 <button
                   type="button"
                   onClick={() => setMobileMenu(false)}
-                  className="rounded-lg p-2 hover:bg-slate-100"
+                  className="rounded-lg p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-900"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="h-[calc(100vh-73px)]">
+              {/* Mobile Sidebar */}
+              <div className="h-[calc(100%-73px)]">
                 <Sidebar />
               </div>
             </div>
           </>
         )}
 
-        {/* MAIN CONTENT */}
+        {/* ===================================================
+            MAIN CONTENT
+        =================================================== */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="w-full flex-1 p-4 sm:p-6 lg:p-8">
+          <main className="w-full flex-1 p-4 sm:p-6 lg:p-7 xl:p-8">
             <Outlet context={{ user }} />
           </main>
         </div>
       </div>
 
-      {/* FOOTER - FULL WIDTH, BELOW HEADER + SIDEBAR/CONTENT */}
+      {/* =====================================================
+          FOOTER
+      ===================================================== */}
       <Footer />
     </div>
   );

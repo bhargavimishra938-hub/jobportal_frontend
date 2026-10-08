@@ -1,369 +1,683 @@
 import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import axios from "axios";
+
+import Header from "../../Components/Header";
+import Footer from "../../Components/Footer";
+
+import { API_BASE, default as API_ROOT } from "../../config/api";
+
 import {
   ArrowLeft,
   BriefcaseBusiness,
   Building2,
-  MapPin,
-  IndianRupee,
-  Upload,
+  CalendarDays,
+  CheckCircle2,
   FileText,
-  Send,
+  GraduationCap,
+  IndianRupee,
   Loader2,
+  MapPin,
+  Upload,
+  Users,
+  X,
 } from "lucide-react";
 
-const JOBS_API =
-  "http://localhost/job_portal/job-portal-api/api/jobs/get-all.php";
+// =========================================================
+// API ENDPOINTS
+// =========================================================
 
-const APPLY_API =
-  "http://localhost/job_portal/job-portal-api/api/applications/apply.php";
+const JOBS_API = `${API_BASE}/jobs/get-all.php`;
+const APPLY_API = `${API_BASE}/applications/apply.php`;
+const CHECK_APPLICATION_API = `${API_BASE}/applications/check.php`;
+
+// =========================================================
+// Get logged-in user
+// =========================================================
+
+const getCurrentUser = () => {
+  try {
+    const storedUser = localStorage.getItem("user");
+
+    if (!storedUser) {
+      return null;
+    }
+
+    return JSON.parse(storedUser);
+  } catch (error) {
+    console.error("Failed to read logged-in user:", error);
+    return null;
+  }
+};
+
+// =========================================================
+// Get USER ID
+//
+// IMPORTANT:
+// Current application architecture:
+// applications.candidate_id = users.id
+//
+// So candidateId here means users.id.
+// =========================================================
+
+const getCandidateId = () => {
+  const user = getCurrentUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const role = String(user.role || "")
+    .toLowerCase()
+    .trim();
+
+  if (role !== "candidate") {
+    return null;
+  }
+
+  const id =
+    user.id ??
+    user.userId ??
+    user.user_id ??
+    localStorage.getItem("userId") ??
+    localStorage.getItem("user_id");
+
+  const userId = Number(id);
+
+  return Number.isInteger(userId) && userId > 0
+    ? userId
+    : null;
+};
+
+// =========================================================
+// Get image/logo URL
+// =========================================================
+
+const getAssetUrl = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  let asset = String(value).trim();
+
+  if (!asset) {
+    return "";
+  }
+
+  // -------------------------------------------------------
+  // Full HTTP / HTTPS URL
+  // -------------------------------------------------------
+
+  if (/^https?:\/\//i.test(asset)) {
+    // Backend may have stored localhost URL.
+    // Convert it to API root based URL.
+    const localhostApiPattern =
+      /^https?:\/\/localhost\/job_portal\/job-portal-api\/?/i;
+
+    if (localhostApiPattern.test(asset)) {
+      asset = asset.replace(
+        localhostApiPattern,
+        ""
+      );
+    } else {
+      return asset;
+    }
+  }
+
+  // -------------------------------------------------------
+  // Normalize slashes
+  // -------------------------------------------------------
+
+  asset = asset.replace(/\\/g, "/");
+
+  asset = asset.replace(/^\/+/, "");
+
+  // -------------------------------------------------------
+  // If backend already returns a full /uploads path,
+  // API_ROOT will be used as base.
+  // -------------------------------------------------------
+
+  return `${API_ROOT}/${asset}`;
+};
+
+// =========================================================
+// Format salary
+// =========================================================
+
+const formatSalary = (salary) => {
+  if (
+    salary === null ||
+    salary === undefined ||
+    String(salary).trim() === ""
+  ) {
+    return "Not disclosed";
+  }
+
+  return String(salary);
+};
+
+// =========================================================
+// Format date
+// =========================================================
+
+const formatDate = (date) => {
+  if (!date) {
+    return "Not specified";
+  }
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(date);
+  }
+
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+// =========================================================
+// Apply Job Component
+// =========================================================
 
 const ApplyJob = () => {
   const { id } = useParams();
-  const location = useLocation();
+
   const navigate = useNavigate();
 
-  const [job, setJob] = useState(location.state?.job || null);
-  const [loadingJob, setLoadingJob] = useState(!job);
+  const location = useLocation();
+
+  // -------------------------------------------------------
+  // User
+  // -------------------------------------------------------
+
+  const user = getCurrentUser();
+
+  const candidateId = getCandidateId();
+
+  // -------------------------------------------------------
+  // State
+  // -------------------------------------------------------
+
+  const [job, setJob] = useState(
+    location.state?.job || null
+  );
+
+  const [loading, setLoading] = useState(
+    !location.state?.job
+  );
+
   const [submitting, setSubmitting] = useState(false);
+
+  const [checkingApplication, setCheckingApplication] =
+    useState(true);
+
+  const [alreadyApplied, setAlreadyApplied] =
+    useState(false);
+
+  const [error, setError] = useState("");
+
+  const [success, setSuccess] = useState("");
 
   const [formData, setFormData] = useState({
     coverLetter: "",
     resume: null,
   });
 
-  const [error, setError] = useState("");
+  const [resumeError, setResumeError] = useState("");
 
-  // =====================================================
-  // GET JOB
-  // =====================================================
+  // =========================================================
+  // Fetch Job Details
+  // =========================================================
 
   useEffect(() => {
-    if (job) return;
+    let cancelled = false;
 
     const fetchJob = async () => {
+      // -----------------------------------------------------
+      // If job came from navigation state
+      // -----------------------------------------------------
+
+      if (location.state?.job) {
+        setJob(location.state.job);
+        setLoading(false);
+        return;
+      }
+
+      // -----------------------------------------------------
+      // Fetch all jobs
+      // -----------------------------------------------------
+
       try {
-        setLoadingJob(true);
+        setLoading(true);
         setError("");
 
-        const response = await fetch(JOBS_API);
+        const response = await axios.get(JOBS_API);
 
-        const rawResponse = await response.text();
+        console.log(
+          "Jobs API response:",
+          response.data
+        );
 
-        console.log("Jobs API Status:", response.status);
-        console.log("Jobs API Raw Response:", rawResponse);
-
-        let data;
-
-        try {
-          data = JSON.parse(rawResponse);
-        } catch (jsonError) {
-          throw new Error("Jobs API returned invalid JSON.");
-        }
-
-        if (!response.ok || !data.success) {
+        if (response.data?.success === false) {
           throw new Error(
-            data.message || "Failed to fetch job"
+            response.data?.message ||
+              "Unable to load jobs."
           );
         }
 
-        const foundJob = (data.jobs || []).find(
-          (item) => Number(item.id) === Number(id)
+        // ---------------------------------------------------
+        // Support multiple response structures
+        // ---------------------------------------------------
+
+        const jobs = Array.isArray(response.data)
+          ? response.data
+          : Array.isArray(response.data?.jobs)
+          ? response.data.jobs
+          : Array.isArray(response.data?.data)
+          ? response.data.data
+          : Array.isArray(response.data?.data?.jobs)
+          ? response.data.data.jobs
+          : [];
+
+        const foundJob = jobs.find(
+          (item) =>
+            String(item.id ?? item.job_id) ===
+            String(id)
         );
 
         if (!foundJob) {
-          throw new Error("Job not found");
+          throw new Error("Job not found.");
         }
 
-        setJob({
-          id: Number(foundJob.id),
-          title: foundJob.job_title || "Untitled Job",
-          company: foundJob.company_name || "Company",
-          location:
-            foundJob.location || "Location not specified",
-          salary:
-            foundJob.salary || "Salary not specified",
-          experience:
-            foundJob.experience || "Fresher",
-          type:
-            foundJob.job_type || "Full Time",
-          description:
-            foundJob.description ||
-            "No description available.",
-        });
+        if (!cancelled) {
+          setJob(foundJob);
+        }
       } catch (err) {
-        console.error("Job Fetch Error:", err);
-        setError(
-          err.message || "Unable to load job."
+        console.error(
+          "Fetch job error:",
+          err.response?.data || err
         );
+
+        if (!cancelled) {
+          setError(
+            err.response?.data?.message ||
+              err.message ||
+              "Unable to load job."
+          );
+        }
       } finally {
-        setLoadingJob(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchJob();
-  }, [id, job]);
 
-  // =====================================================
-  // INPUT CHANGE
-  // =====================================================
+    return () => {
+      cancelled = true;
+    };
+  }, [id, location.state]);
 
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
+  // =========================================================
+  // Check Already Applied
+  // =========================================================
+  //
+  // IMPORTANT:
+  // check.php should also use:
+  //
+  // candidateId = users.id
+  //
+  // because current applications table stores
+  // users.id inside candidate_id.
+  //
+  // =========================================================
 
-    if (files && files[0]) {
-      const selectedFile = files[0];
+  useEffect(() => {
+    let cancelled = false;
 
-      const allowedTypes = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ];
+    const checkApplication = async () => {
+      setCheckingApplication(true);
 
-      const fileExtension = selectedFile.name
-        .split(".")
-        .pop()
-        .toLowerCase();
+      if (!candidateId || !id) {
+        setAlreadyApplied(false);
+        setCheckingApplication(false);
+        return;
+      }
 
-      const allowedExtensions = ["pdf", "doc", "docx"];
-
-      // File type validation
-      if (
-        !allowedTypes.includes(selectedFile.type) &&
-        !allowedExtensions.includes(fileExtension)
-      ) {
-        setError(
-          "Only PDF, DOC and DOCX files are allowed."
+      try {
+        const response = await axios.get(
+          CHECK_APPLICATION_API,
+          {
+            params: {
+              jobId: Number(id),
+              candidateId: Number(candidateId),
+            },
+          }
         );
 
-        setFormData((prev) => ({
-          ...prev,
-          resume: null,
-        }));
+        console.log(
+          "Check application response:",
+          response.data
+        );
 
-        return;
+        if (cancelled) {
+          return;
+        }
+
+        if (response.data?.success === true) {
+          setAlreadyApplied(
+            response.data?.applied === true
+          );
+        } else {
+          setAlreadyApplied(false);
+
+          setError(
+            response.data?.message ||
+              "Unable to check application."
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Check application error:",
+          err.response?.data || err
+        );
+
+        if (!cancelled) {
+          setAlreadyApplied(false);
+
+          setError(
+            err.response?.data?.message ||
+              "Application status check nahi ho saka. Please retry."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingApplication(false);
+        }
       }
+    };
 
-      // File size validation - 5MB
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        setError("Resume must be less than 5 MB.");
+    checkApplication();
 
-        setFormData((prev) => ({
-          ...prev,
-          resume: null,
-        }));
+    return () => {
+      cancelled = true;
+    };
+  }, [id, candidateId]);
 
-        return;
-      }
+  // =========================================================
+  // Validate Resume
+  // =========================================================
 
-      setError("");
+  const validateResume = (file) => {
+    if (!file) {
+      return "Please select your resume.";
+    }
+
+    const allowedExtensions = [
+      "pdf",
+      "doc",
+      "docx",
+    ];
+
+    const extension = file.name
+      .split(".")
+      .pop()
+      ?.toLowerCase();
+
+    if (!allowedExtensions.includes(extension)) {
+      return "Only PDF, DOC and DOCX files are allowed.";
+    }
+
+    if (file.size <= 0) {
+      return "Selected resume is empty.";
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return "Resume size must be less than or equal to 5 MB.";
+    }
+
+    return "";
+  };
+
+  // =========================================================
+  // Resume Selection
+  // =========================================================
+
+  const handleResumeChange = (event) => {
+    const file = event.target.files?.[0];
+
+    setResumeError("");
+    setSuccess("");
+    setError("");
+
+    if (!file) {
+      setFormData((prev) => ({
+        ...prev,
+        resume: null,
+      }));
+
+      return;
+    }
+
+    const validationError = validateResume(file);
+
+    if (validationError) {
+      setResumeError(validationError);
 
       setFormData((prev) => ({
         ...prev,
-        resume: selectedFile,
+        resume: null,
       }));
+
+      event.target.value = "";
 
       return;
     }
 
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      resume: file,
     }));
   };
 
-  // =====================================================
-  // SUBMIT APPLICATION
-  // =====================================================
+  // =========================================================
+  // Cover Letter
+  // =========================================================
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleCoverLetterChange = (event) => {
+    setFormData((prev) => ({
+      ...prev,
+      coverLetter: event.target.value,
+    }));
 
     setError("");
+    setSuccess("");
+  };
 
-    // -----------------------------------------------
-    // CHECK LOGIN
-    // -----------------------------------------------
+  // =========================================================
+  // Submit Application
+  // =========================================================
 
-    const storedUser = localStorage.getItem("user");
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    if (!storedUser) {
-      alert("Please login as a candidate first.");
-      navigate("/login");
+    setError("");
+    setSuccess("");
+    setResumeError("");
+
+    // -------------------------------------------------------
+    // Candidate Login Check
+    // -------------------------------------------------------
+
+    if (
+      !user ||
+      String(user.role || "")
+        .toLowerCase()
+        .trim() !== "candidate"
+    ) {
+      navigate("/login", {
+        state: {
+          redirectTo: `/jobs/${id}/apply`,
+          message:
+            "Please login as a candidate to apply.",
+        },
+      });
+
       return;
     }
 
-    let user;
+    // -------------------------------------------------------
+    // Candidate ID Check
+    // -------------------------------------------------------
 
-    try {
-      user = JSON.parse(storedUser);
-    } catch (err) {
-      console.error("User JSON Error:", err);
-
-      localStorage.removeItem("user");
-
-      alert("Session expired. Please login again.");
-
-      navigate("/login");
-      return;
-    }
-
-    console.log("Logged In User:", user);
-
-    // -----------------------------------------------
-    // CHECK USER ID
-    // -----------------------------------------------
-
-    if (!user?.id) {
-      alert(
+    if (!candidateId) {
+      setError(
         "Candidate information not found. Please login again."
       );
 
-      navigate("/login");
       return;
     }
 
-    // -----------------------------------------------
-    // CHECK ROLE
-    // -----------------------------------------------
+    // -------------------------------------------------------
+    // Job Check
+    // -------------------------------------------------------
 
-    if (user.role !== "candidate") {
-      alert("Only candidates can apply for jobs.");
+    if (!job) {
+      setError(
+        "Job information is not available."
+      );
+
       return;
     }
 
-    // -----------------------------------------------
-    // CHECK JOB
-    // -----------------------------------------------
+    // -------------------------------------------------------
+    // Already Applied
+    // -------------------------------------------------------
 
-    if (!job?.id) {
-      setError("Job information is missing.");
+    if (alreadyApplied) {
+      setError(
+        "You have already applied for this job."
+      );
+
       return;
     }
 
-    // -----------------------------------------------
-    // CHECK RESUME
-    // -----------------------------------------------
+    // -------------------------------------------------------
+    // Resume Validation
+    // -------------------------------------------------------
 
-    if (!formData.resume) {
-      setError("Please upload your resume.");
+    const resumeValidation =
+      validateResume(formData.resume);
+
+    if (resumeValidation) {
+      setResumeError(resumeValidation);
       return;
     }
 
-    // -----------------------------------------------
-    // CREATE FORM DATA
-    // -----------------------------------------------
+    // -------------------------------------------------------
+    // Job ID
+    // -------------------------------------------------------
 
-    const data = new FormData();
-
-    data.append("job_id", Number(job.id));
-    data.append("candidate_id", Number(user.id));
-    data.append(
-      "cover_letter",
-      formData.coverLetter.trim()
+    const jobId = Number(
+      job.id ?? job.job_id
     );
-    data.append("resume", formData.resume);
 
-    console.log("Submitting Application:", {
-      job_id: Number(job.id),
-      candidate_id: Number(user.id),
-      cover_letter: formData.coverLetter.trim(),
-      resume: formData.resume.name,
-      resume_size: formData.resume.size,
-      resume_type: formData.resume.type,
-    });
+    if (!jobId || jobId <= 0) {
+      setError("Invalid job ID.");
+      return;
+    }
 
     try {
       setSubmitting(true);
 
-      // ---------------------------------------------
-      // API REQUEST
-      // ---------------------------------------------
+      // -----------------------------------------------------
+      // FormData
+      // -----------------------------------------------------
 
-      const response = await fetch(APPLY_API, {
-        method: "POST",
-        body: data,
-      });
+      const data = new FormData();
 
-      console.log(
-        "Apply API HTTP Status:",
-        response.status
+      data.append(
+        "job_id",
+        String(jobId)
       );
 
       // IMPORTANT:
-      // First read text because PHP may return HTML error
-      const rawResponse = await response.text();
-
-      console.log(
-        "Apply API RAW Response:",
-        rawResponse
+      // Current DB architecture:
+      // applications.candidate_id = users.id
+      //
+      // Therefore send logged-in users.id here.
+      data.append(
+        "candidate_id",
+        String(candidateId)
       );
 
-      // ---------------------------------------------
-      // TRY JSON PARSE
-      // ---------------------------------------------
-
-      let result;
-
-      try {
-        result = JSON.parse(rawResponse);
-      } catch (jsonError) {
-        console.error(
-          "JSON Parse Error:",
-          jsonError
-        );
-
-        console.error(
-          "PHP RAW ERROR:",
-          rawResponse
-        );
-
-        setError(
-          "Backend PHP error aa raha hai. Browser Console me 'Apply API RAW Response' check karein."
-        );
-
-        return;
-      }
-
-      // ---------------------------------------------
-      // API RESPONSE
-      // ---------------------------------------------
-
-      console.log(
-        "Apply API Response:",
-        result
+      data.append(
+        "cover_letter",
+        formData.coverLetter.trim()
       );
 
-      if (!response.ok || !result.success) {
+      data.append(
+        "resume",
+        formData.resume
+      );
+
+      // -----------------------------------------------------
+      // Submit
+      // -----------------------------------------------------
+
+      const response = await axios.post(
+        APPLY_API,
+        data,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      console.log(
+        "Apply job response:",
+        response.data
+      );
+
+      if (!response.data?.success) {
         throw new Error(
-          result.message ||
-            "Failed to submit application"
+          response.data?.message ||
+            "Unable to submit application."
         );
       }
 
-      // ---------------------------------------------
+      // -----------------------------------------------------
       // SUCCESS
-      // ---------------------------------------------
+      // -----------------------------------------------------
 
-      console.log(
-        "Application Submitted Successfully:",
-        result
+      setAlreadyApplied(true);
+
+      setSuccess(
+        response.data?.message ||
+          "Application submitted successfully."
       );
 
-      alert(
-        "Application submitted successfully! 🎉"
-      );
+      setFormData({
+        coverLetter: "",
+        resume: null,
+      });
 
-      navigate("/candidate/applied-jobs");
+      setResumeError("");
 
     } catch (err) {
       console.error(
-        "Application Error:",
-        err
+        "Apply job error:",
+        err.response?.data || err
       );
 
       setError(
-        err.message ||
+        err.response?.data?.message ||
+          err.message ||
           "Unable to submit application."
       );
     } finally {
@@ -371,347 +685,693 @@ const ApplyJob = () => {
     }
   };
 
-  // =====================================================
-  // LOADING
-  // =====================================================
+  // =========================================================
+  // Loading
+  // =========================================================
 
-  if (loadingJob) {
+  if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-blue-600" />
+      <>
+        <Header />
 
-          <p className="mt-4 text-sm font-medium text-slate-600">
-            Loading job...
-          </p>
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="flex items-center gap-3 text-slate-600">
+            <Loader2
+              className="animate-spin"
+              size={24}
+            />
+
+            <span>Loading job...</span>
+          </div>
         </div>
-      </div>
+
+        <Footer />
+      </>
     );
   }
 
-  // =====================================================
-  // ERROR / JOB NOT FOUND
-  // =====================================================
+  // =========================================================
+  // Job Not Found
+  // =========================================================
 
-  if (error && !job) {
+  if (!job) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          <h2 className="text-xl font-bold text-red-600">
-            Unable to load job
-          </h2>
+      <>
+        <Header />
 
-          <p className="mt-3 text-sm text-slate-500">
-            {error}
-          </p>
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-sm border p-8 text-center max-w-md w-full">
+            <X
+              className="mx-auto text-red-500 mb-4"
+              size={40}
+            />
 
-          <button
-            type="button"
-            onClick={() => navigate("/jobs")}
-            className="mt-6 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Back to Jobs
-          </button>
+            <h2 className="text-xl font-bold text-slate-800">
+              Job Not Found
+            </h2>
+
+            <p className="text-slate-500 mt-2">
+              {error ||
+                "This job is no longer available."}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => navigate("/jobs")}
+              className="mt-6 px-5 py-3 rounded-xl bg-cyan-600 text-white font-semibold hover:bg-cyan-700"
+            >
+              Browse Jobs
+            </button>
+          </div>
         </div>
-      </div>
+
+        <Footer />
+      </>
     );
   }
 
-  // =====================================================
-  // PAGE
-  // =====================================================
+  // =========================================================
+  // Company Logo
+  // =========================================================
+
+  const companyLogo = getAssetUrl(
+    job.company_logo_url ||
+      job.company_logo ||
+      job.logo
+  );
+
+  // =========================================================
+  // Render
+  // =========================================================
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <>
+      <Header />
 
-      {/* ================= HEADER ================= */}
+      <main className="min-h-screen bg-slate-50">
 
-      <section className="bg-slate-900 px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
+        {/* ===================================================
+            PAGE HEADER
+        =================================================== */}
 
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="mb-6 flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Job
-          </button>
+        <section className="bg-slate-900 text-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-2 text-slate-300 hover:text-white mb-8"
+            >
+              <ArrowLeft size={18} />
+              Back
+            </button>
 
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-bold text-white">
-              {job?.company
-                ?.charAt(0)
-                ?.toUpperCase() || "C"}
+            <div className="flex flex-col md:flex-row gap-6 md:items-center">
+
+              {/* Company Logo */}
+
+              <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+
+                {companyLogo ? (
+                  <img
+                    src={companyLogo}
+                    alt={
+                      job.company_name ||
+                      "Company"
+                    }
+                    className="w-full h-full object-contain"
+                    onError={(event) => {
+                      event.currentTarget.style.display =
+                        "none";
+                    }}
+                  />
+                ) : (
+                  <Building2
+                    size={34}
+                    className="text-cyan-600"
+                  />
+                )}
+
+              </div>
+
+              {/* Job Header */}
+
+              <div>
+                <h1 className="text-2xl md:text-4xl font-bold">
+                  {job.job_title ||
+                    job.title ||
+                    "Job Position"}
+                </h1>
+
+                <p className="mt-2 text-slate-300 flex flex-wrap gap-3">
+
+                  <span>
+                    {job.company_name ||
+                      "Company"}
+                  </span>
+
+                  {job.location && (
+                    <>
+                      <span>•</span>
+
+                      <span>
+                        {job.location}
+                      </span>
+                    </>
+                  )}
+
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================
+            MAIN CONTENT
+        =================================================== */}
+
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+          <div className="grid lg:grid-cols-3 gap-8">
+
+            {/* =================================================
+                APPLICATION AREA
+            ================================================= */}
+
+            <div className="lg:col-span-2">
+
+              {/* =================================================
+                  SUCCESS SCREEN
+              ================================================= */}
+
+              {success && alreadyApplied ? (
+
+                <div className="bg-white rounded-2xl border border-green-200 shadow-sm p-8 md:p-12 text-center">
+
+                  <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-green-50 flex items-center justify-center">
+                    <CheckCircle2
+                      size={44}
+                      className="text-green-600"
+                    />
+                  </div>
+
+                  <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
+                    Application Submitted
+                    Successfully!
+                  </h2>
+
+                  <p className="text-slate-600 mt-3">
+                    Your application for{" "}
+                    <span className="font-semibold">
+                      {job.job_title ||
+                        job.title}
+                    </span>{" "}
+                    at{" "}
+                    <span className="font-semibold">
+                      {job.company_name ||
+                        "this company"}
+                    </span>{" "}
+                    has been submitted
+                    successfully.
+                  </p>
+
+                  <p className="text-sm text-slate-500 mt-2">
+                    You can track your application
+                    status from your applications
+                    page.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        "/candidate/applications"
+                      )
+                    }
+                    className="mt-7 px-6 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-semibold inline-flex items-center justify-center gap-2"
+                  >
+                    <FileText size={18} />
+                    View My Applications
+                  </button>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate("/jobs")
+                      }
+                      className="mt-4 text-slate-600 hover:text-cyan-700 font-medium"
+                    >
+                      Browse More Jobs
+                    </button>
+                  </div>
+
+                </div>
+
+              ) : (
+
+                /* =================================================
+                   APPLICATION FORM
+                ================================================= */
+
+                <form
+                  onSubmit={handleSubmit}
+                  className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8"
+                >
+
+                  {/* Form Header */}
+
+                  <div className="mb-8">
+
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      Apply for this position
+                    </h2>
+
+                    <p className="text-slate-500 mt-2">
+                      Upload your resume and submit
+                      your application for this job.
+                    </p>
+
+                  </div>
+
+                  {/* =================================================
+                      ALREADY APPLIED
+                  ================================================= */}
+
+                  {alreadyApplied && !success && (
+                    <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 flex gap-3">
+
+                      <CheckCircle2
+                        className="text-green-600 shrink-0"
+                        size={22}
+                      />
+
+                      <div>
+                        <p className="font-semibold text-green-800">
+                          Already Applied
+                        </p>
+
+                        <p className="text-sm text-green-700 mt-1">
+                          You have already submitted
+                          an application for this
+                          job.
+                        </p>
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* =================================================
+                      ERROR
+                  ================================================= */}
+
+                  {error && (
+                    <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                  {/* =================================================
+                      RESUME
+                  ================================================= */}
+
+                  <div className="mb-7">
+
+                    <label className="block text-sm font-semibold text-slate-800 mb-2">
+                      Resume{" "}
+                      <span className="text-red-500">
+                        *
+                      </span>
+                    </label>
+
+                    <label className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-cyan-500 hover:bg-cyan-50/30 transition">
+
+                      <Upload
+                        size={32}
+                        className="text-cyan-600 mb-3"
+                      />
+
+                      <span className="font-semibold text-slate-800">
+                        {formData.resume
+                          ? formData.resume.name
+                          : "Upload your resume"}
+                      </span>
+
+                      <span className="text-sm text-slate-500 mt-1">
+                        PDF, DOC or DOCX • Maximum
+                        5 MB
+                      </span>
+
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        onChange={
+                          handleResumeChange
+                        }
+                        className="hidden"
+                        disabled={
+                          submitting ||
+                          alreadyApplied
+                        }
+                      />
+
+                    </label>
+
+                    {resumeError && (
+                      <p className="text-sm text-red-600 mt-2">
+                        {resumeError}
+                      </p>
+                    )}
+
+                    {/* Selected Resume */}
+
+                    {formData.resume &&
+                      !resumeError && (
+                        <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 border p-3">
+
+                          <div className="flex items-center gap-3 min-w-0">
+
+                            <FileText
+                              size={20}
+                              className="text-cyan-600 shrink-0"
+                            />
+
+                            <div className="min-w-0">
+
+                              <p className="font-medium text-slate-800 truncate">
+                                {
+                                  formData
+                                    .resume
+                                    .name
+                                }
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                {(
+                                  formData
+                                    .resume
+                                    .size /
+                                  1024 /
+                                  1024
+                                ).toFixed(2)}{" "}
+                                MB
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          {!alreadyApplied && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData(
+                                  (prev) => ({
+                                    ...prev,
+                                    resume: null,
+                                  })
+                                )
+                              }
+                              className="text-red-500 hover:text-red-700"
+                              aria-label="Remove resume"
+                            >
+                              <X size={20} />
+                            </button>
+                          )}
+
+                        </div>
+                      )}
+
+                  </div>
+
+                  {/* =================================================
+                      COVER LETTER
+                  ================================================= */}
+
+                  <div className="mb-7">
+
+                    <label className="block text-sm font-semibold text-slate-800 mb-2">
+                      Cover Letter
+                    </label>
+
+                    <textarea
+                      value={
+                        formData.coverLetter
+                      }
+                      onChange={
+                        handleCoverLetterChange
+                      }
+                      disabled={
+                        submitting ||
+                        alreadyApplied
+                      }
+                      rows={8}
+                      placeholder="Write a short cover letter explaining why you are suitable for this position..."
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 resize-none disabled:bg-slate-100"
+                    />
+
+                    <p className="text-xs text-slate-500 mt-2">
+                      Keep your cover letter clear
+                      and relevant to this
+                      position.
+                    </p>
+
+                  </div>
+
+                  {/* =================================================
+                      SUBMIT
+                  ================================================= */}
+
+                  <button
+                    type="submit"
+                    disabled={
+                      submitting ||
+                      alreadyApplied ||
+                      checkingApplication
+                    }
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-400 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition"
+                  >
+
+                    {submitting ? (
+                      <>
+                        <Loader2
+                          size={20}
+                          className="animate-spin"
+                        />
+                        Submitting Application...
+                      </>
+                    ) : checkingApplication ? (
+                      <>
+                        <Loader2
+                          size={20}
+                          className="animate-spin"
+                        />
+                        Checking Application...
+                      </>
+                    ) : alreadyApplied ? (
+                      <>
+                        <CheckCircle2 size={20} />
+                        Applied
+                      </>
+                    ) : (
+                      <>
+                        <BriefcaseBusiness
+                          size={20}
+                        />
+                        Submit Application
+                      </>
+                    )}
+
+                  </button>
+
+                </form>
+              )}
+
             </div>
 
-            <div>
+            {/* =================================================
+                JOB DETAILS
+            ================================================= */}
 
-              <h1 className="text-3xl font-bold text-white">
-                Apply for {job?.title}
-              </h1>
+            <div className="space-y-6">
 
-              <p className="mt-2 flex items-center gap-2 text-slate-300">
-                <Building2 className="h-4 w-4" />
-                {job?.company}
-              </p>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+
+                <h3 className="text-lg font-bold text-slate-900 mb-5">
+                  Job Details
+                </h3>
+
+                <div className="space-y-5">
+
+                  {/* Job Type */}
+
+                  <div className="flex gap-3">
+
+                    <BriefcaseBusiness
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Job Type
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {job.job_type ||
+                          "Not specified"}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Location */}
+
+                  <div className="flex gap-3">
+
+                    <MapPin
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Location
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {job.location ||
+                          "Not specified"}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Salary */}
+
+                  <div className="flex gap-3">
+
+                    <IndianRupee
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Salary
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {formatSalary(
+                          job.salary
+                        )}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Experience */}
+
+                  <div className="flex gap-3">
+
+                    <GraduationCap
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Experience
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {job.experience ||
+                          "Not specified"}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Vacancies */}
+
+                  <div className="flex gap-3">
+
+                    <Users
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Vacancies
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {job.vacancies ||
+                          "Not specified"}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Deadline */}
+
+                  <div className="flex gap-3">
+
+                    <CalendarDays
+                      size={20}
+                      className="text-cyan-600 shrink-0"
+                    />
+
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Application Deadline
+                      </p>
+
+                      <p className="font-medium text-slate-800">
+                        {formatDate(
+                          job.deadline
+                        )}
+                      </p>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* =================================================
+                  CANDIDATE INFO
+              ================================================= */}
+
+              <div className="bg-cyan-50 rounded-2xl border border-cyan-100 p-6">
+
+                <h3 className="font-bold text-slate-900">
+                  Applying as
+                </h3>
+
+                <p className="mt-3 font-semibold text-slate-800">
+                  {user?.name || "Candidate"}
+                </p>
+
+                <p className="text-sm text-slate-600 mt-1">
+                  {user?.email || ""}
+                </p>
+
+              </div>
 
             </div>
 
           </div>
 
-        </div>
-      </section>
-
-      {/* ================= MAIN ================= */}
-
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-
-        <div className="grid gap-7 lg:grid-cols-[1fr_360px]">
-
-          {/* ================= FORM ================= */}
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-
-            <div className="mb-7">
-
-              <h2 className="text-xl font-bold text-slate-900">
-                Submit Your Application
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Complete the form below to apply for this position.
-              </p>
-
-            </div>
-
-            {/* ERROR */}
-
-            {error && (
-              <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                {error}
-              </div>
-            )}
-
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-6"
-            >
-
-              {/* ================= RESUME ================= */}
-
-              <div>
-
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Resume{" "}
-                  <span className="text-red-500">
-                    *
-                  </span>
-                </label>
-
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition hover:border-blue-400 hover:bg-blue-50">
-
-                  <Upload className="h-8 w-8 text-slate-400" />
-
-                  <span className="mt-3 max-w-full break-all text-sm font-semibold text-slate-700">
-                    {formData.resume
-                      ? formData.resume.name
-                      : "Upload your resume"}
-                  </span>
-
-                  <span className="mt-1 text-xs text-slate-400">
-                    PDF, DOC or DOCX • Maximum 5 MB
-                  </span>
-
-                  <input
-                    type="file"
-                    name="resume"
-                    accept=".pdf,.doc,.docx"
-                    onChange={handleChange}
-                    className="hidden"
-                  />
-
-                </label>
-
-                {formData.resume && (
-                  <p className="mt-2 text-xs text-green-600">
-                    ✓ Resume selected successfully
-                  </p>
-                )}
-
-              </div>
-
-              {/* ================= COVER LETTER ================= */}
-
-              <div>
-
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Cover Letter
-                </label>
-
-                <textarea
-                  name="coverLetter"
-                  value={formData.coverLetter}
-                  onChange={handleChange}
-                  rows="7"
-                  placeholder="Tell the recruiter why you are a good fit for this job..."
-                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-
-                <p className="mt-2 text-xs text-slate-400">
-                  Optional
-                </p>
-
-              </div>
-
-              {/* ================= SUBMIT ================= */}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-5 w-5" />
-                    Submit Application
-                  </>
-                )}
-
-              </button>
-
-            </form>
-
-          </section>
-
-          {/* ================= JOB SUMMARY ================= */}
-
-          <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-            <h2 className="text-lg font-bold text-slate-900">
-              Job Summary
-            </h2>
-
-            <div className="mt-5 space-y-4">
-
-              {/* Job Type */}
-
-              <div className="flex gap-3">
-
-                <BriefcaseBusiness className="mt-0.5 h-5 w-5 text-blue-600" />
-
-                <div>
-
-                  <p className="text-xs text-slate-400">
-                    Job Type
-                  </p>
-
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {job?.type}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* Location */}
-
-              <div className="flex gap-3">
-
-                <MapPin className="mt-0.5 h-5 w-5 text-blue-600" />
-
-                <div>
-
-                  <p className="text-xs text-slate-400">
-                    Location
-                  </p>
-
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {job?.location}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* Salary */}
-
-              <div className="flex gap-3">
-
-                <IndianRupee className="mt-0.5 h-5 w-5 text-blue-600" />
-
-                <div>
-
-                  <p className="text-xs text-slate-400">
-                    Salary
-                  </p>
-
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {job?.salary}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* Experience */}
-
-              <div className="flex gap-3">
-
-                <BriefcaseBusiness className="mt-0.5 h-5 w-5 text-blue-600" />
-
-                <div>
-
-                  <p className="text-xs text-slate-400">
-                    Experience
-                  </p>
-
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {job?.experience}
-                  </p>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            <div className="my-6 border-t border-slate-100" />
-
-            {/* Description */}
-
-            <div>
-
-              <div className="flex items-center gap-2">
-
-                <FileText className="h-5 w-5 text-blue-600" />
-
-                <h3 className="font-semibold text-slate-900">
-                  Job Description
-                </h3>
-
-              </div>
-
-              <p className="mt-3 text-sm leading-6 text-slate-500">
-                {job?.description}
-              </p>
-
-            </div>
-
-          </aside>
-
-        </div>
+        </section>
 
       </main>
 
-    </div>
+      <Footer />
+    </>
   );
 };
 

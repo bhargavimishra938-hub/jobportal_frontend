@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
 import {
   ArrowLeft,
   Briefcase,
@@ -15,10 +16,343 @@ import {
   Loader2,
   AlertCircle,
   Hash,
+  Mail,
+  Phone,
+  UserRound,
+  GraduationCap,
+  Code2,
+  ClipboardList,
+  ListChecks,
+  Eye,
+  ShieldCheck,
+  ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 
-const API_BASE =
-  "http://localhost/job_portal/job-portal-api/api";
+/* =====================================================
+   API
+===================================================== */
+
+import { API_BASE, default as API_ROOT } from "../../config/api";
+
+const APPLICATION_DETAILS_API = `${API_BASE}/applications/get-candidate-application-by-id.php`;
+
+/* =====================================================
+   USER HELPERS
+===================================================== */
+
+const getCurrentUser = () => {
+  try {
+    const storedUser = localStorage.getItem("user");
+
+    if (!storedUser) {
+      return null;
+    }
+
+    return JSON.parse(storedUser);
+  } catch (error) {
+    console.error("User parse error:", error);
+    return null;
+  }
+};
+
+const getCandidateId = () => {
+  const user = getCurrentUser();
+
+  if (!user) {
+    return (
+      localStorage.getItem("id") ||
+      localStorage.getItem("userId") ||
+      localStorage.getItem("user_id")
+    );
+  }
+
+  return (
+    user.id ||
+    user.userId ||
+    user.user_id ||
+    localStorage.getItem("id") ||
+    localStorage.getItem("userId") ||
+    localStorage.getItem("user_id")
+  );
+};
+
+/* =====================================================
+   FORMAT HELPERS
+===================================================== */
+
+const normalizeStatus = (status) => {
+  return String(status || "Applied")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+};
+
+const formatDate = (value) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+/* =====================================================
+   DOCUMENT URL HELPER
+
+   Resume upload.php me:
+   /uploads/resumes/filename.pdf
+===================================================== */
+
+const getDocumentUrl = (documentPath, type = "") => {
+  if (!documentPath) {
+    return "";
+  }
+
+  let value = String(documentPath).trim();
+
+  if (!value) {
+    return "";
+  }
+
+  /* Already complete HTTP/HTTPS URL */
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  /* Blob/Data URL */
+  if (value.startsWith("blob:") || value.startsWith("data:")) {
+    return value;
+  }
+
+  /* Remove localhost API URL if backend sends full URL */
+  value = value.replace(
+    /^https?:\/\/localhost\/job_portal\/job-portal-api\/?/i,
+    ""
+  );
+
+  /* Remove leading slash */
+  value = value.replace(/^\/+/, "");
+
+  /* Already uploads/... */
+  if (value.startsWith("uploads/")) {
+    return `${API_ROOT}/${value}`;
+  }
+
+  /* Resume filename only */
+  if (type === "resume") {
+    return `${API_ROOT}/uploads/resumes/${value}`;
+  }
+
+  /* Other uploaded document */
+  return `${API_ROOT}/uploads/${value}`;
+};
+
+/* =====================================================
+   STATUS CONFIG
+===================================================== */
+
+const getStatusConfig = (status) => {
+  const normalized = normalizeStatus(status);
+
+  switch (normalized) {
+    case "shortlisted":
+      return {
+        label: "Shortlisted",
+        className: "bg-green-50 text-green-700 border-green-200",
+        icon: CheckCircle,
+      };
+
+    case "interview":
+    case "interview scheduled":
+    case "interview_scheduled":
+    case "interviewed":
+      return {
+        label: "Interview",
+        className: "bg-purple-50 text-purple-700 border-purple-200",
+        icon: CalendarDays,
+      };
+
+    case "selected":
+      return {
+        label: "Selected",
+        className: "bg-blue-50 text-blue-700 border-blue-200",
+        icon: CheckCircle,
+      };
+
+    case "hired":
+      return {
+        label: "Hired",
+        className: "bg-green-50 text-green-700 border-green-200",
+        icon: CheckCircle,
+      };
+
+    case "rejected":
+      return {
+        label: "Rejected",
+        className: "bg-red-50 text-red-700 border-red-200",
+        icon: XCircle,
+      };
+
+    case "viewed":
+      return {
+        label: "Viewed",
+        className: "bg-cyan-50 text-cyan-700 border-cyan-200",
+        icon: Eye,
+      };
+
+    case "screening":
+      return {
+        label: "Screening",
+        className: "bg-blue-50 text-blue-700 border-blue-200",
+        icon: Clock,
+      };
+
+    default:
+      return {
+        label: status || "Applied",
+        className: "bg-amber-50 text-amber-700 border-amber-200",
+        icon: Clock,
+      };
+  }
+};
+
+/* =====================================================
+   STATUS MESSAGE
+===================================================== */
+
+const getStatusMessage = (status) => {
+  const normalized = normalizeStatus(status);
+
+  switch (normalized) {
+    case "shortlisted":
+      return "Your application has been shortlisted by the recruiter.";
+
+    case "screening":
+      return "Your application is currently being reviewed by the recruiter.";
+
+    case "rejected":
+      return "Your application was not selected for this position.";
+
+    case "hired":
+      return "Congratulations! You have been hired for this position.";
+
+    case "selected":
+      return "Congratulations! You have been selected for this position.";
+
+    case "interview":
+    case "interview scheduled":
+    case "interview_scheduled":
+    case "interviewed":
+      return "Your application has moved to the interview stage.";
+
+    case "viewed":
+      return "The recruiter has viewed your application.";
+
+    default:
+      return "Your application has been successfully submitted and is under review.";
+  }
+};
+
+/* =====================================================
+   SKILLS PARSER
+===================================================== */
+
+const parseSkills = (skillsValue) => {
+  if (!skillsValue) {
+    return [];
+  }
+
+  if (Array.isArray(skillsValue)) {
+    return skillsValue
+      .map((skill) => String(skill).trim())
+      .filter(Boolean);
+  }
+
+  if (typeof skillsValue === "string") {
+    try {
+      const parsed = JSON.parse(skillsValue);
+
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((skill) => String(skill).trim())
+          .filter(Boolean);
+      }
+    } catch {
+      // Normal string parsing
+    }
+
+    return skillsValue
+      .split(/[,|]/)
+      .map((skill) => skill.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+/* =====================================================
+   TEXT LIST PARSER
+===================================================== */
+
+const renderListText = (value) => {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/)
+      .map((item) =>
+        item
+          .replace(/^\s*[-*•]\s*/, "")
+          .replace(/^\s*\d+[.)]\s*/, "")
+          .trim()
+      )
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+/* =====================================================
+   MAIN COMPONENT
+===================================================== */
 
 const ApplicationDetails = () => {
   const { id } = useParams();
@@ -26,474 +360,818 @@ const ApplicationDetails = () => {
 
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchApplication();
-  }, [id]);
+  /* ===================================================
+     FETCH APPLICATION
+  =================================================== */
 
-  const fetchApplication = async () => {
+  const fetchApplication = async (showRefresh = false) => {
     try {
-      setLoading(true);
-      setError("");
-
-      // Get logged-in user
-      const storedUser = localStorage.getItem("user");
-
-      let user = null;
-
-      try {
-        user = storedUser ? JSON.parse(storedUser) : null;
-      } catch (parseError) {
-        console.error("User data parse error:", parseError);
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      // Get candidate ID from logged-in user
-      const candidateId =
-        user?.id ||
-        localStorage.getItem("id") ||
-        localStorage.getItem("userId") ||
-        localStorage.getItem("user_id");
+      setError("");
 
-      console.log("Application ID:", id);
-      console.log("Logged-in User:", user);
-      console.log("Candidate ID:", candidateId);
+      const user = getCurrentUser();
+      const candidateId = getCandidateId();
 
-      // Candidate ID is required
+      /* Login check */
+      if (!user) {
+        navigate("/login", {
+          state: {
+            redirectTo: `/candidate/application/${id}`,
+            message: "Please login to view application details.",
+          },
+        });
+
+        return;
+      }
+
+      /* Candidate role check */
+      if (
+        user.role &&
+        String(user.role).trim().toLowerCase() !== "candidate"
+      ) {
+        setError("Only candidates can view application details.");
+        return;
+      }
+
+      /* Candidate ID check */
       if (!candidateId) {
         setError("Candidate login information not found. Please login again.");
         return;
       }
 
-      const response = await fetch(
-        `${API_BASE}/applications/get-candidate-application-by-id.php?applicationId=${id}&candidateId=${candidateId}`
-      );
+      /* Application ID check */
+      if (!id) {
+        setError("Application ID is missing.");
+        return;
+      }
+
+      /* API URL */
+      const url =
+        `${APPLICATION_DETAILS_API}` +
+        `?applicationId=${encodeURIComponent(id)}` +
+        `&candidateId=${encodeURIComponent(candidateId)}`;
+
+      console.log("Application Details API:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
       if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
+        throw new Error(`Server returned HTTP ${response.status}`);
       }
 
       const data = await response.json();
 
-      console.log("Application API Response:", data);
+      console.log("Application Details Response:", data);
 
       if (data.success && data.application) {
         setApplication(data.application);
       } else {
+        setApplication(null);
         setError(data.message || "Application not found.");
       }
-    } catch (error) {
-      console.error("Application details error:", error);
-      setError("Unable to load application details.");
+    } catch (err) {
+      console.error("Application details error:", err);
+
+      setError(err.message || "Unable to load application details.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case "Shortlisted":
-        return "bg-green-50 text-green-700 border-green-200";
+  /* ===================================================
+     INITIAL LOAD
+  =================================================== */
 
-      case "Rejected":
-        return "bg-red-50 text-red-700 border-red-200";
+  useEffect(() => {
+    fetchApplication();
+  }, [id]);
 
-      case "Hired":
-        return "bg-blue-50 text-blue-700 border-blue-200";
+  /* ===================================================
+     DYNAMIC SKILLS
+  =================================================== */
 
-      default:
-        return "bg-amber-50 text-amber-700 border-amber-200";
+  const skills = useMemo(() => {
+    return parseSkills(
+      application?.skills ||
+        application?.job_skills ||
+        application?.required_skills
+    );
+  }, [application]);
+
+  /* ===================================================
+     DYNAMIC RESPONSIBILITIES
+  =================================================== */
+
+  const responsibilities = useMemo(() => {
+    return renderListText(
+      application?.responsibilities || application?.job_responsibilities
+    );
+  }, [application]);
+
+  /* ===================================================
+     DYNAMIC REQUIREMENTS
+  =================================================== */
+
+  const requirements = useMemo(() => {
+    return renderListText(
+      application?.requirements || application?.job_requirements
+    );
+  }, [application]);
+
+  /* ===================================================
+     DYNAMIC DOCUMENTS
+  =================================================== */
+
+  const documents = useMemo(() => {
+    if (!application) {
+      return [];
     }
-  };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "Shortlisted":
-      case "Hired":
-        return <CheckCircle size={18} />;
+    const list = [];
 
-      case "Rejected":
-        return <XCircle size={18} />;
+    /* Resume */
+    const resume =
+      application.resume ||
+      application.resume_url ||
+      application.resume_path;
 
-      default:
-        return <Clock size={18} />;
+    if (resume) {
+      list.push({
+        key: "resume",
+        title: "Resume",
+        description: "Resume submitted with this application",
+        url: getDocumentUrl(resume, "resume"),
+      });
     }
-  };
 
-  // Loading
+    /* Cover Letter Document */
+    const coverLetter =
+      application.cover_letter_file ||
+      application.cover_letter_url ||
+      application.cover_letter_document;
+
+    if (coverLetter) {
+      list.push({
+        key: "cover-letter",
+        title: "Cover Letter Document",
+        description: "Cover letter document submitted with application",
+        url: getDocumentUrl(coverLetter, "cover-letter"),
+      });
+    }
+
+    /* Portfolio */
+    const portfolio =
+      application.portfolio ||
+      application.portfolio_url ||
+      application.portfolio_document;
+
+    if (portfolio) {
+      list.push({
+        key: "portfolio",
+        title: "Portfolio",
+        description: "Portfolio submitted with application",
+        url: getDocumentUrl(portfolio, "portfolio"),
+      });
+    }
+
+    /* Certificate */
+    const certificate =
+      application.certificate ||
+      application.certificate_url ||
+      application.certificate_document;
+
+    if (certificate) {
+      list.push({
+        key: "certificate",
+        title: "Certificate",
+        description: "Certificate submitted with application",
+        url: getDocumentUrl(certificate, "certificate"),
+      });
+    }
+
+    return list;
+  }, [application]);
+
+  /* ===================================================
+     STATUS
+  =================================================== */
+
+  const statusConfig = getStatusConfig(application?.status);
+  const StatusIcon = statusConfig.icon;
+  const normalizedStatus = normalizeStatus(application?.status);
+
+  /* ===================================================
+     STATUS TIMELINE
+  =================================================== */
+
+  const reviewStatuses = [
+    "viewed",
+    "screening",
+    "shortlisted",
+    "interview",
+    "interview scheduled",
+    "interview_scheduled",
+    "interviewed",
+    "selected",
+    "hired",
+  ];
+
+  const interviewStatuses = [
+    "shortlisted",
+    "interview",
+    "interview scheduled",
+    "interview_scheduled",
+    "interviewed",
+    "selected",
+    "hired",
+  ];
+
+  const finalStatuses = ["selected", "hired", "rejected"];
+
+  /* ===================================================
+     LOADING
+  =================================================== */
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <Loader2
-            className="animate-spin mx-auto text-blue-600"
-            size={32}
-          />
+      <div className="min-h-screen bg-slate-50">
+        <main className="flex min-h-screen items-center justify-center px-4">
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
 
-          <p className="mt-4 text-slate-600 font-medium">
-            Loading application details...
-          </p>
-        </div>
+            <h2 className="mt-5 text-xl font-bold text-slate-900">
+              Loading application
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Fetching your application details...
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
 
-  // Error
+  /* ===================================================
+     ERROR
+  =================================================== */
+
   if (error || !application) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-        <div className="max-w-4xl mx-auto">
-
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition"
-          >
-            <ArrowLeft size={18} />
-            Back
-          </button>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-10 text-center">
-
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50">
-              <AlertCircle
-                size={32}
-                className="text-red-500"
-              />
+      <div className="min-h-screen bg-slate-50">
+        <main className="flex min-h-screen items-center justify-center px-4">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
+              <AlertCircle size={32} className="text-red-500" />
             </div>
 
-            <h2 className="text-xl font-bold text-slate-900 mt-5">
+            <h2 className="mt-5 text-2xl font-bold text-slate-900">
               Application Not Found
             </h2>
 
-            <p className="text-slate-500 mt-2">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               {error || "Unable to find this application."}
             </p>
 
-            <button
-              onClick={() => navigate("/candidate/applied-jobs")}
-              className="mt-6 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold shadow-sm shadow-blue-600/20 hover:bg-blue-700 transition"
-            >
-              Back to Applied Jobs
-            </button>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => fetchApplication(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <RefreshCw size={17} />
+                Retry
+              </button>
 
+              <button
+                onClick={() => navigate("/candidate/applications")}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                <ArrowLeft size={17} />
+                Applications
+              </button>
+            </div>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
+  /* ===================================================
+     PAGE
+  =================================================== */
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-slate-50">
+      {/* =================================================
+          TOP APPLICATION HEADER
+      ================================================= */}
 
-        {/* Back Button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition"
-        >
-          <ArrowLeft size={18} />
-          Back
-        </button>
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <button
+            onClick={() => navigate("/candidate/applications")}
+            className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
+          >
+            <ArrowLeft size={17} />
+            Back to Applications
+          </button>
 
-        {/* Header */}
-        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-500" />
 
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-600 to-cyan-500" />
-
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
-
-            <div>
-
-              <div className="flex items-center gap-3 mb-3">
-
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm shadow-blue-500/30 flex items-center justify-center shrink-0">
-                  <Briefcase
-                    size={22}
-                    className="text-white"
-                  />
-                </div>
-
-                <div>
-
-                  <h1 className="text-2xl font-bold text-slate-900">
-                    {application.job_title}
-                  </h1>
-
-                  <div className="flex items-center gap-2 text-slate-500 mt-1">
-                    <Building2 size={16} />
-                    {application.company_name}
+            <div className="p-5 sm:p-7">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-100">
+                    <Briefcase size={28} className="text-white" />
                   </div>
 
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Application Details
+                    </p>
+
+                    <h1 className="mt-1 truncate text-2xl font-bold text-slate-900 sm:text-3xl">
+                      {application.job_title ||
+                        application.title ||
+                        application.job_name ||
+                        "Job Application"}
+                    </h1>
+
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+                      <span className="inline-flex items-center gap-2 font-medium text-slate-700">
+                        <Building2 size={16} className="text-blue-600" />
+
+                        {application.company_name ||
+                          application.company ||
+                          application.companyName ||
+                          "Company"}
+                      </span>
+
+                      {application.location && (
+                        <span className="inline-flex items-center gap-2">
+                          <MapPin size={16} className="text-blue-600" />
+
+                          {application.location}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={`inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold ${statusConfig.className}`}
+                >
+                  <StatusIcon size={18} />
+                  {statusConfig.label}
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-4 text-sm text-slate-500 mt-4">
-
-                <div className="flex items-center gap-1.5">
-                  <MapPin size={16} className="text-slate-400" />
-                  {application.location}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Briefcase size={16} className="text-slate-400" />
-                  {application.job_type}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Clock size={16} className="text-slate-400" />
-                  {application.experience}
-                </div>
-
-              </div>
             </div>
-
-            {/* Status */}
-            <div
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border font-semibold shrink-0 ${getStatusStyle(
-                application.status
-              )}`}
-            >
-              {getStatusIcon(application.status)}
-              {application.status}
-            </div>
-
           </div>
         </div>
+      </section>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* =================================================
+          MAIN CONTENT
+      ================================================= */}
 
-          {/* LEFT */}
-          <div className="lg:col-span-2 space-y-6">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* =================================================
+              LEFT
+          ================================================= */}
+
+          <div className="space-y-6">
+            {/* Candidate Information */}
+
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <SectionTitle
+                  icon={<UserRound size={19} />}
+                  title="Candidate Information"
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Information submitted with your application
+                </p>
+              </div>
+
+              <div className="grid gap-4 p-6 sm:grid-cols-2">
+                <InfoBox
+                  label="Full Name"
+                  value={application.candidate_name || application.name}
+                  icon={<UserRound size={15} />}
+                />
+
+                <InfoBox
+                  label="Email"
+                  value={application.candidate_email || application.email}
+                  icon={<Mail size={15} />}
+                />
+
+                <InfoBox
+                  label="Phone"
+                  value={application.candidate_phone || application.phone}
+                  icon={<Phone size={15} />}
+                />
+
+                <InfoBox
+                  label="Education"
+                  value={
+                    application.education || application.qualification
+                  }
+                  icon={<GraduationCap size={15} />}
+                />
+              </div>
+            </section>
 
             {/* Job Information */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-              <h2 className="text-lg font-bold text-slate-900 mb-5">
-                Job Information
-              </h2>
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <SectionTitle
+                  icon={<Briefcase size={19} />}
+                  title="Job Information"
+                />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Company
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {application.company_name}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Location
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {application.location}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Job Type
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {application.job_type}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Experience
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1">
-                    {application.experience}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Salary
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
-                    <IndianRupee size={14} />
-                    {application.salary || "Not specified"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-                  <p className="text-xs text-slate-400">
-                    Application Date
-                  </p>
-
-                  <p className="font-semibold text-slate-800 mt-1 flex items-center gap-1">
-                    <CalendarDays size={14} />
-                    {application.applied_at}
-                  </p>
-                </div>
-
+                <p className="mt-1 text-xs text-slate-500">
+                  Details of the position you applied for
+                </p>
               </div>
-            </div>
+
+              <div className="grid gap-4 p-6 sm:grid-cols-2">
+                <InfoBox
+                  label="Company"
+                  value={application.company_name || application.company}
+                  icon={<Building2 size={15} />}
+                />
+
+                <InfoBox
+                  label="Location"
+                  value={application.location}
+                  icon={<MapPin size={15} />}
+                />
+
+                <InfoBox
+                  label="Job Type"
+                  value={application.job_type || application.jobType}
+                  icon={<Briefcase size={15} />}
+                />
+
+                <InfoBox
+                  label="Experience"
+                  value={application.experience}
+                  icon={<Clock size={15} />}
+                />
+
+                <InfoBox
+                  label="Salary"
+                  value={application.salary}
+                  icon={<IndianRupee size={15} />}
+                />
+
+                <InfoBox
+                  label="Workplace"
+                  value={
+                    application.workplace_type ||
+                    application.work_mode ||
+                    application.workplace
+                  }
+                  icon={<MapPin size={15} />}
+                />
+
+                <InfoBox
+                  label="Applied On"
+                  value={formatDateTime(
+                    application.applied_at || application.created_at
+                  )}
+                  icon={<CalendarDays size={15} />}
+                />
+
+                <InfoBox
+                  label="Application ID"
+                  value={
+                    application.application_id || application.id || id
+                  }
+                  icon={<Hash size={15} />}
+                />
+              </div>
+            </section>
 
             {/* Job Description */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-              <h2 className="text-lg font-bold text-slate-900 mb-4">
-                Job Description
-              </h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <SectionTitle
+                icon={<FileText size={19} />}
+                title="Job Description"
+              />
 
-              <p className="text-slate-600 leading-7 whitespace-pre-line">
+              <p className="mt-5 whitespace-pre-line text-sm leading-7 text-slate-600">
                 {application.description ||
+                  application.job_description ||
                   "No description available."}
               </p>
+            </section>
 
-            </div>
+            {/* Responsibilities */}
+
+            {responsibilities.length > 0 && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <SectionTitle
+                  icon={<ClipboardList size={19} />}
+                  title="Responsibilities"
+                />
+
+                <ul className="mt-5 space-y-3">
+                  {responsibilities.map((item, index) => (
+                    <li
+                      key={index}
+                      className="flex gap-3 text-sm leading-6 text-slate-600"
+                    >
+                      <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Requirements */}
+
+            {requirements.length > 0 && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <SectionTitle
+                  icon={<ListChecks size={19} />}
+                  title="Job Requirements"
+                />
+
+                <ul className="mt-5 space-y-3">
+                  {requirements.map((item, index) => (
+                    <li
+                      key={index}
+                      className="flex gap-3 text-sm leading-6 text-slate-600"
+                    >
+                      <CheckCircle
+                        size={17}
+                        className="mt-1 shrink-0 text-blue-600"
+                      />
+
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {/* Skills */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-              <h2 className="text-lg font-bold text-slate-900 mb-4">
-                Required Skills
-              </h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <SectionTitle
+                icon={<Code2 size={19} />}
+                title="Required Skills"
+              />
 
-              <div className="flex flex-wrap gap-2">
-
-                {Array.isArray(application.skills) &&
-                application.skills.length > 0 ? (
-                  application.skills.map((skill, index) => (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {skills.length > 0 ? (
+                  skills.map((skill, index) => (
                     <span
-                      key={index}
-                      className="px-3 py-1.5 bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-100 rounded-lg text-sm font-medium"
+                      key={`${skill}-${index}`}
+                      className="rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 ring-1 ring-inset ring-blue-100"
                     >
                       {skill}
                     </span>
                   ))
                 ) : (
-                  <span className="text-slate-500 text-sm">
+                  <p className="text-sm text-slate-500">
                     No skills specified.
-                  </span>
+                  </p>
                 )}
-
               </div>
-            </div>
+            </section>
 
             {/* Cover Letter */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
-              <h2 className="text-lg font-bold text-slate-900 mb-4">
-                Your Cover Letter
-              </h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <SectionTitle
+                icon={<FileText size={19} />}
+                title="Your Cover Letter"
+              />
 
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-
-                <p className="text-slate-600 leading-7 whitespace-pre-line">
-                  {application.cover_letter ||
-                    "No cover letter provided."}
+              <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-5">
+                <p className="whitespace-pre-line text-sm leading-7 text-slate-600">
+                  {application.cover_letter || "No cover letter provided."}
                 </p>
-
               </div>
-            </div>
+            </section>
 
+            {/* Documents */}
+
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <SectionTitle
+                  icon={<FileText size={19} />}
+                  title="Submitted Documents"
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Documents submitted with this application
+                </p>
+              </div>
+
+              <div className="space-y-3 p-6">
+                {documents.length > 0 ? (
+                  documents.map((document) => (
+                    <div
+                      key={document.key}
+                      className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50">
+                          <FileText size={20} className="text-red-500" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800">
+                            {document.title}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {document.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {document.url && (
+                        <div className="flex shrink-0 gap-2">
+                          <a
+                            href={document.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                          >
+                            <Eye size={15} />
+                            View
+                          </a>
+
+                          <a
+                            href={document.url}
+                            download
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                          >
+                            <Download size={15} />
+                            Download
+                          </a>
+
+                          <a
+                            href={document.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 transition hover:bg-slate-100"
+                            title="Open"
+                          >
+                            <ExternalLink size={15} />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <FileText
+                      size={28}
+                      className="mx-auto text-slate-300"
+                    />
+
+                    <p className="mt-3 text-sm font-medium text-slate-600">
+                      No documents found
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      Your submitted resume will appear here.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
 
-          {/* RIGHT */}
-          <div className="space-y-6">
+          {/* =================================================
+              RIGHT SIDEBAR
+          ================================================= */}
 
-            {/* Application Status */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <aside className="space-y-6 lg:sticky lg:top-6">
+            {/* Status */}
 
-              <h2 className="text-lg font-bold text-slate-900 mb-5">
-                Application Status
-              </h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-slate-900">
+                  Application Status
+                </h2>
+
+                <button
+                  onClick={() => fetchApplication(true)}
+                  disabled={refreshing}
+                  className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+                  title="Refresh"
+                >
+                  <RefreshCw
+                    size={17}
+                    className={refreshing ? "animate-spin" : ""}
+                  />
+                </button>
+              </div>
 
               <div
-                className={`rounded-xl border p-4 ${getStatusStyle(
-                  application.status
-                )}`}
+                className={`mt-5 rounded-xl border p-4 ${statusConfig.className}`}
               >
-
-                <div className="flex items-center gap-3">
-
-                  {getStatusIcon(application.status)}
+                <div className="flex items-start gap-3">
+                  <StatusIcon size={20} className="mt-0.5" />
 
                   <div>
-
                     <p className="font-semibold">
-                      {application.status}
+                      {statusConfig.label}
                     </p>
 
-                    <p className="text-sm mt-1 opacity-80">
-                      {application.status === "Shortlisted"
-                        ? "Your application has been shortlisted."
-                        : application.status === "Rejected"
-                        ? "Your application was not selected."
-                        : application.status === "Hired"
-                        ? "Congratulations! You have been selected."
-                        : "Your application has been submitted."}
+                    <p className="mt-1 text-sm leading-5 opacity-80">
+                      {getStatusMessage(application.status)}
                     </p>
-
                   </div>
                 </div>
-
               </div>
-            </div>
+            </section>
 
-            {/* Resume */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            {/* Timeline */}
 
-              <h2 className="text-lg font-bold text-slate-900 mb-4">
-                Submitted Resume
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900">
+                Application Timeline
               </h2>
 
-              <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+              <div className="mt-5 space-y-5">
+                <TimelineItem
+                  active
+                  title="Application Submitted"
+                  date={formatDateTime(
+                    application.applied_at || application.created_at
+                  )}
+                />
 
-                <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center shrink-0">
-                  <FileText
-                    size={20}
-                    className="text-red-500"
-                  />
-                </div>
+                <TimelineItem
+                  active={reviewStatuses.includes(normalizedStatus)}
+                  title="Application Review"
+                  date={
+                    reviewStatuses.includes(normalizedStatus)
+                      ? "Recruiter activity recorded"
+                      : "Waiting for recruiter"
+                  }
+                />
 
-                <div className="flex-1 min-w-0">
+                <TimelineItem
+                  active={interviewStatuses.includes(normalizedStatus)}
+                  title="Shortlisted / Interview"
+                  date={
+                    interviewStatuses.includes(normalizedStatus)
+                      ? "Application progressed"
+                      : "Pending"
+                  }
+                />
 
-                  <p className="font-medium text-slate-800 truncate">
-                    Resume
-                  </p>
-
-                  <p className="text-xs text-slate-500">
-                    Submitted with application
-                  </p>
-
-                </div>
-
+                <TimelineItem
+                  active={finalStatuses.includes(normalizedStatus)}
+                  title="Final Decision"
+                  date={
+                    finalStatuses.includes(normalizedStatus)
+                      ? statusConfig.label
+                      : "Pending"
+                  }
+                  last
+                />
               </div>
-
-              {application.resume && (
-                <a
-                  href={application.resume}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium shadow-sm shadow-blue-600/20 hover:bg-blue-700 transition"
-                >
-                  <Download size={17} />
-                  View / Download Resume
-                </a>
-              )}
-
-            </div>
+            </section>
 
             {/* Application ID */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-3">
-
-                <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                  <Hash size={16} className="text-slate-500" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                  <Hash size={17} className="text-slate-500" />
                 </div>
 
                 <div>
@@ -501,17 +1179,115 @@ const ApplicationDetails = () => {
                     Application ID
                   </p>
 
-                  <p className="font-bold text-slate-900 mt-0.5">
-                    #{application.application_id}
+                  <p className="mt-0.5 font-bold text-slate-900">
+                    #{application.application_id || application.id || id}
                   </p>
                 </div>
-
               </div>
+            </section>
 
-            </div>
+            {/* Security */}
 
-          </div>
+            <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+              <div className="flex gap-3">
+                <ShieldCheck
+                  size={19}
+                  className="mt-0.5 shrink-0 text-blue-600"
+                />
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Your information is secure
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Your application details and documents are available only
+                    to authorized users.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Back Button */}
+
+            <button
+              onClick={() => navigate("/candidate/applications")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            >
+              <ArrowLeft size={16} />
+              Back to Applications
+            </button>
+          </aside>
         </div>
+      </main>
+    </div>
+  );
+};
+
+/* =====================================================
+   INFO BOX
+===================================================== */
+
+const InfoBox = ({ label, value, icon }) => {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+        {icon}
+        {label}
+      </div>
+
+      <p className="mt-2 break-words font-semibold text-slate-800">
+        {value || "Not specified"}
+      </p>
+    </div>
+  );
+};
+
+/* =====================================================
+   SECTION TITLE
+===================================================== */
+
+const SectionTitle = ({ icon, title }) => {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+        <span className="text-blue-600">{icon}</span>
+      </div>
+
+      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+    </div>
+  );
+};
+
+/* =====================================================
+   TIMELINE ITEM
+===================================================== */
+
+const TimelineItem = ({ active, title, date, last = false }) => {
+  return (
+    <div className="relative flex gap-3">
+      {!last && (
+        <div className="absolute left-[9px] top-5 h-full w-px bg-slate-200" />
+      )}
+
+      <div
+        className={`relative z-10 mt-0.5 h-5 w-5 shrink-0 rounded-full border-4 border-white ${
+          active
+            ? "bg-blue-600 ring-1 ring-blue-100"
+            : "bg-slate-300"
+        }`}
+      />
+
+      <div className="min-w-0">
+        <p
+          className={`text-sm font-semibold ${
+            active ? "text-slate-800" : "text-slate-400"
+          }`}
+        >
+          {title}
+        </p>
+
+        <p className="mt-1 text-xs text-slate-400">{date}</p>
       </div>
     </div>
   );
